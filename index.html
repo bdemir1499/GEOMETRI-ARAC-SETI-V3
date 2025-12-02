@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>GEOMETRİ ARAÇ SETİ-V3-3D CİSİMLER</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="ruler.css">
+    <link rel="stylesheet" href="gonye.css">
+    <link rel="stylesheet" href="aciolcer.css">
+    <link rel="stylesheet" href="pergel.css">
+<link rel="stylesheet" href="cokgen.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+ </head>
+
+
+<body>
+<div id="polygon-preview-label" class="polygon-label hidden"></div>
+    <div id="compass-container" class="hidden">
+        <div class="handle-top"></div>
+        <div class="rotate-head"></div>
+        <div class="pergel-leg left-leg">
+            <div class="needle-tip"></div>
+        </div>
+        <div class="pergel-leg right-leg">
+            <div class="pen-resize-handle"></div>
+            
+            <div class="pen-tip"></div>
+        </div>
+        </div>
+    </div>
+
+    <canvas id="drawing-canvas"></canvas>
+<div id="three-container" class="hidden"></div>
+<div id="label-3d">r = 0 cm</div>
+
+    <div class="panel left-panel">
+        <button id="btn-silgi" class="tool-button">Silgi</button>
+        
+        <button id="btn-kalem" class="tool-button">Kalem</button>
+        <div id="pen-options" class="tool-options hidden">
+            <div class="color-box" style="background-color: #FFFFFF;" data-color="#FFFFFF"></div> 
+            <div class="color-box" style="background-color: #FF69B4;" data-color="#FF69B4"></div> 
+            <div class="color-box" style="background-color: #00FFCC;" data-color="#00FFCC"></div> 
+            <div class="color-box" style="background-color: #FFA500;" data-color="#FFA500"></div> 
+            <div class="color-box" style="background-color: #FF00FF;" data-color="#FF00FF"></div> 
+            <div class="color-box" style="background-color: #00FFFF;" data-color="#00FFFF"></div> 
+            <div class="color-box" style="background-color: #FFFF00;" data-color="#FFFF00"></div> 
+            <div class="color-box" style="background-color: #9400D3;" data-color="#9400D3"></div>
+            
+            <div class="color-box" style="background-color: #0000FF;" data-color="#0000FF"></div> 
+            <div class="color-box" style="background-color: #FF0000;" data-color="#FF0000"></div>
+            <div class="thickness-control-container">
+                <label for="pen-width-slider" class="thickness-label">Kalınlık: <span id="pen-width-value">4</span></label>
+                <input type="range" id="pen-width-slider" min="1" max="30" value="4" class="neon-slider">
+            </div> 
+        </div> 
+
+        <button id="btn-cizgi" class="tool-button">Çizgi</button>
+        <div id="line-options" class="tool-options hidden">
+            <button id="btn-nokta" class="tool-button-sub">Nokta</button>
+            <button id="btn-d_cizgi" class="tool-button-sub">Düz Çizgi</button>
+            <button id="btn-dogru" class="tool-button-sub">Doğru</button>
+            <button id="btn-dogru_parcasi" class="tool-button-sub">Doğru Parçası</button>
+            <button id="btn-isin" class="tool-button-sub">Işın</button>
+            
+            <div id="line-color-options" class="color-palette">
+                <div class="color-box" style="background-color: #FFFFFF;" data-color="#FFFFFF"></div>
+                
+                <div class="color-box" style="background-color: #00FFCC;" data-color="#00FFCC"></div>
+                <div class="color-box" style="background-color: #FF69B4;" data-color="#FF69B4"></div>
+                <div class="color-box" style="background-color: #FFA500;" data-color="#FFA500"></div>
+                <div class="color-box" style="background-color: #FF00FF;" data-color="#FF00FF"></div>
+                <div class="color-box" style="background-color: #00FFFF;" data-color="#00FFFF"></div>
+                <div class="color-box" style="background-color: #FFFF00;" data-color="#FFFF00"></div>
+                <div class="color-box" style="background-color: #9400D3;" data-color="#9400D3"></div>
+            </div>
+        </div>
+
+        <button id="btn-cetvel" class="tool-button">Cetvel</button>
+        <button id="btn-gonye" class="tool-button">Gönye</button>
+        <button id="btn-aciolcer" class="tool-button">Açı Ölçer</button>
+        <button id="btn-pergel" class="tool-button">Pergel</button>
+        <button id="btn-cokgenler" class="tool-button">Çokgenler</button> 
+        
+        <div id="polygon-options" class="tool-options hidden"> 
+            <button id="btn-cember" class="tool-button-sub">Çember</button>
+            <button id="btn-duzgun_ucgen" class="tool-button-sub" data-sides="3">Düzgün 3gen</button>
+            <button id="btn-duzgun_dortgen" class="tool-button-sub" data-sides="4">Düzgün 4gen</button>
+            <button id="btn-duzgun_besgen" class="tool-button-sub" data-sides="5">Düzgün 5gen</button>
+            <button id="btn-duzgun_altigen" class="tool-button-sub" data-sides="6">Düzgün 6gen</button>
+            <button id="btn-duzgun_yedigen" class="tool-button-sub" data-sides="7">Düzgün 7gen</button>
+            <button id="btn-duzgun_sekizgen" class="tool-button-sub" data-sides="8">Düzgün 8gen</button>
+
+            <div id="polygon-color-options" class="color-palette" style="margin-top: 10px; justify-content: center;">
+                <div class="color-box" style="background-color: #FFFFFF;" data-color="#FFFFFF"></div>
+                <div class="color-box" style="background-color: #00FFCC;" data-color="#00FFCC"></div>
+                <div class="color-box" style="background-color: #FF69B4;" data-color="#FF69B4"></div>
+                <div class="color-box" style="background-color: #FFA500;" data-color="#FFA500"></div>
+                <div class="color-box" style="background-color: #FF00FF;" data-color="#FF00FF"></div>
+                <div class="color-box" style="background-color: #00FFFF;" data-color="#00FFFF"></div>
+                <div class="color-box" style="background-color: #FFFF00;" data-color="#FFFF00"></div>
+                <div class="color-box" style="background-color: #9400D3;" data-color="#9400D3"></div>
+            </div>
+            </div> ```
+
+        <button id="btn-oyunlar" class="tool-button">Oyunlar</button>
+        <div id="oyunlar-options" class="tool-options hidden">
+            </div>
+
+<button id="btn-3d-shapes" class="tool-button">3D Şekiller 🧊</button>
+        
+        <div id="shapes-3d-options" class="tool-options hidden" style="flex-direction: column; width: 220px; margin-left: 10px;">
+            
+            <button id="btn-sphere" class="tool-button-sub" data-shape="sphere">Küre ⚫</button>
+            
+            <button id="btn-prisms-toggle" class="tool-button-sub">Prizmalar ▼</button>
+            <div id="prisms-list" class="tool-options-sub hidden">
+                <button class="tool-button-sub-item" data-shape="prism_cube">Küp</button>
+                <button class="tool-button-sub-item" data-shape="prism_cylinder">Silindir</button>
+                <button class="tool-button-sub-item" data-shape="prism_3">Üçgen Prizma</button>
+                <button class="tool-button-sub-item" data-shape="prism_4">Kare Prizma</button>
+                <button class="tool-button-sub-item" data-shape="prism_rect">Dikdörtgen Prizma</button>
+                <button class="tool-button-sub-item" data-shape="prism_5">Beşgen Prizma</button>
+                <button class="tool-button-sub-item" data-shape="prism_6">Altıgen Prizma</button>
+            </div>
+
+            <button id="btn-pyramids-toggle" class="tool-button-sub">Piramitler ▼</button>
+            <div id="pyramids-list" class="tool-options-sub hidden">
+                <button class="tool-button-sub-item" data-shape="pyramid_3">Üçgen Piramit</button>
+                <button class="tool-button-sub-item" data-shape="pyramid_4_duz">Düzgün Dört Yüzlü</button>
+                <button class="tool-button-sub-item" data-shape="pyramid_4">Kare Piramit</button>
+                <button class="tool-button-sub-item" data-shape="pyramid_rect">Dikdörtgen Piramit</button>
+                <button class="tool-button-sub-item" data-shape="pyramid_5">Beşgen Piramit</button>
+                <button class="tool-button-sub-item" data-shape="pyramid_6">Altıgen Piramit</button>
+            </div>
+
+<button id="btn-unfold" class="tool-button-sub" style="margin-top: 15px; border-color: #ff00ff; color: #ff00ff;">
+        Açınımı Gör (Animasyon) 🎬
+    </button>
+
+
+        </div>
+
+    </div> <div class="panel right-panel">
+        <button id="btn-tool-color" class="tool-button">Araç Rengi: Siyah</button>
+        <button id="btn-undo" class="tool-button">Geri Al</button>
+        <button id="btn-clear-all" class="tool-button">Hepsini Sil</button>
+        <button id="btn-move" class="tool-button">Taşı</button>
+        <button id="btn-upload" class="tool-button">Resim/Dosya(PDFKitap) Yükle</button>
+        <button id="btn-animate" class="tool-button">Canlandır</button>
+        <input type="file" id="file-input" accept="image/*, application/pdf" style="display: none;">
+        <div id="pdf-controls" class="tool-options-right hidden" style="flex-direction: column; align-items: center; margin-top: 10px; padding: 5px; width: 100%;">
+            
+            <div id="page-count-label" style="color: #00ffcc; font-size: 12px; margin-bottom: 5px; font-weight: bold;">Sayfa: 0 / 0</div>
+            
+            <div style="display: flex; gap: 5px;">
+                <button id="prev-page" class="tool-button-sub" style="width: 40px; text-align: center; cursor: pointer;">&lt;</button>
+                <button id="next-page" class="tool-button-sub" style="width: 40px; text-align: center; cursor: pointer;">&gt;</button>
+            </div>
+        </div> </div> <button id="btn-help">Video Yardım</button>
+
+    <div id="help-modal" class="help-modal hidden">
+        <div class="help-content">
+            <div class="help-header">
+                <h2>Nasıl Kullanılır?</h2>
+                <button id="close-help" class="close-btn">×</button>
+            </div>
+            <div class="help-body">
+                <div class="video-list" id="video-list-container"></div>
+                <div class="video-player-container">
+                    <video id="main-video-player" controls>Tarayıcınız desteklemiyor.</video>
+                    <div id="video-title-label" class="video-title">Bir video seçin</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<button id="btn-close-pdf" class="hidden">PDF KAPAT ✖</button>
+
+    <script src="pdf.min.js"></script>
+    <script src="app.js"></script>    
+    <script src="ruler.js"></script>
+    <script src="gonye.js"></script>
+    <script src="aciolcer.js"></script>
+    <script src="pergel.js"></script>
+    <script src="cokgen.js"></script>
+    <script src="oyunlar.js"></script>
+
+</body>
+</html>
