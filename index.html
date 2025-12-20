@@ -111,7 +111,7 @@
 
 <button id="btn-3d-shapes" class="tool-button">3D Şekiller 🧊</button>
         
-        <div id="shapes-3d-options" class="tool-options hidden" style="flex-direction: column; width: 220px; margin-left: 10px;">
+        <div id="shapes-3d-options" class="tool-options hidden" style="flex-direction: column; width: 220px;">
             
             <button id="btn-sphere" class="tool-button-sub" data-shape="sphere">Küre ⚫</button>
             
@@ -134,16 +134,18 @@
                 <button class="tool-button-sub-item" data-shape="pyramid_rect">Dikdörtgen Piramit</button>
                 <button class="tool-button-sub-item" data-shape="pyramid_5">Beşgen Piramit</button>
                 <button class="tool-button-sub-item" data-shape="pyramid_6">Altıgen Piramit</button>
+                <button class="tool-button-sub-item" data-shape="pyramid_cone">Koni 🍦</button>
+            </div> <div id="unfold-container" class="tool-sub-group" style="margin-top: 15px; border-top: 1px solid #ff00ff; padding-top: 10px;">
+                <label style="color: #ff00ff; font-size: 12px; display: block; margin-bottom: 5px;">
+                    Şekil Açınımı (Animasyon) 🎬
+                </label>
+                <input type="range" id="unfold-slider" min="0" max="100" value="0" class="neon-slider-pink">
             </div>
-
-<button id="btn-unfold" class="tool-button-sub" style="margin-top: 15px; border-color: #ff00ff; color: #ff00ff;">
-        Açınımı Gör (Animasyon) 🎬
-    </button>
-
 
         </div>
 
-    </div> <div class="panel right-panel">
+
+    </div> </div> <div class="panel right-panel">
         <button id="btn-tool-color" class="tool-button">Araç Rengi: Siyah</button>
         <button id="btn-undo" class="tool-button">Geri Al</button>
         <button id="btn-clear-all" class="tool-button">Hepsini Sil</button>
@@ -159,7 +161,11 @@
                 <button id="prev-page" class="tool-button-sub" style="width: 40px; text-align: center; cursor: pointer;">&lt;</button>
                 <button id="next-page" class="tool-button-sub" style="width: 40px; text-align: center; cursor: pointer;">&gt;</button>
             </div>
-        </div> </div> <button id="btn-help">Video Yardım</button>
+        </div> </div> 
+
+
+
+<button id="btn-help">Video Yardım</button>
 
     <div id="help-modal" class="help-modal hidden">
         <div class="help-content">

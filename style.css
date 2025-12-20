@@ -30,8 +30,8 @@ body {
 /* Panellerin Genel Stili */
 .panel {
     position: fixed;
-    top: 50%;
-    transform: translateY(-50%);
+    top: 35% !important; /* Eskiden 50% idi. 35% yaparak yukarı aldık. */
+    transform: translateY(-50%) !important;
     background-color: rgba(10, 10, 31, 0.8); /* Yarı saydam panel arka planı */
     border: 2px solid #00ffcc; /* Neon çerçeve */
     box-shadow: 0 0 15px #00ffcc;
@@ -266,16 +266,37 @@ body.cursor-eraser .eraser-cursor-preview {
     box-shadow: 0 0 10px #00FF00;
 }
 
+/* style.css */
+
+/* --- style.css EN ALTINA EKLE --- */
+
 .right-panel {
-    /* panel'in dikey ortalamasını iptal et */
-    top: 15px;
-    transform: translateY(0); 
-
-    /* Konumu sağa ayarla */
-    left: auto;
-    right: 15px;
+    position: fixed !important;
+    
+    /* SAĞA SABİTLEME (En Kritik Kısım) */
+    right: 15px !important; 
+    left: auto !important; /* Sol taraftan gelen komutları iptal et */
+    
+    /* Dikey Ortalama */
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    
+    /* Görünüm Ayarları */
+    width: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px; /* Butonlar arası boşluk */
+    
+    /* DÜZELTME: z-index artırıldı ki diğer menülerin altında kalmasın */
+    z-index: 2000 !important; 
+    
+    background-color: rgba(10, 10, 31, 0.9); /* Hafif şeffaf zemin */
+    padding: 10px;
+    border-radius: 15px;
+    border: 1px solid #00ffcc;
+    box-shadow: 0 0 10px rgba(0, 255, 204, 0.2); /* Hafif neon parlama */
 }
-
 /* Çizgi menüsü ile aynı yana açılma stili */
 /* --- style.css'in en sonuna ekleyin veya mevcut olanı bununla DEĞİŞTİRİN --- */
 
@@ -794,24 +815,32 @@ body.cursor-snapshot {
 
 /* --- 3D ALT MENÜLER (YAN TARAFA AÇILAN) --- */
 .tool-options-sub {
-    position: absolute;      /* Bağımsız hareket etsin */
-    left: 100%;              /* Ana kutunun tam sağ bitimine yapışsın */
-    width: 200px;            /* Genişliği */
-    background-color: rgba(10, 10, 31, 0.95); /* Arka planı koyu olsun (Alttaki görünmesin) */
-    border: 2px solid #ff00ff; /* Pembe Çerçeve */
-    border-radius: 0 10px 10px 10px;
-    padding: 5px;
-    margin-left: 5px;        /* Ana kutudan 5px uzak olsun */
-    z-index: 25;             /* En üstte görünsün */
+    position: absolute !important;
     
-    /* Başlangıçta gizli */
-    display: none; 
+    /* ▼▼▼ DÜZELTME: SAĞ TARAFA ALINDI ▼▼▼ */
+    left: 100% !important;  /* Ana menünün sağına geç */
+    right: auto !important; /* Sola gitme zorlamasını iptal et */
+    /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
+    
+    top: 0; /* JS ile hizalanacak ama varsayılan 0 olsun */
+    margin-left: 10px; /* Biraz boşluk bırak */
+    margin-right: 0;
+    
+    /* Görsel Stil */
+    width: 180px;
+    background-color: rgba(10, 10, 31, 0.95);
+    border: 2px solid #ff00ff;
+    border-radius: 10px;
+    padding: 5px;
+    
+    display: none;
     flex-direction: column;
+    z-index: 1006; /* Ana menünün üstünde */
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
 }
 
-/* JS ile 'flex' yapınca görünür olacak */
 .tool-options-sub:not(.hidden) {
-    display: flex;
+    display: flex !important;
 }
 
 /* 2. Seviye Butonlar (Üçgen Prizma vb.) */
@@ -840,36 +869,78 @@ body.cursor-snapshot {
     display: none !important;
 }
 
-/* 3D Menüsünü Panelin Yanına Zorla */
+/* style.css */
+
+/* style.css */
+
+/* style.css */
+
+/* 1. ANA 3D MENÜSÜ (Sol Panelin Sağında) */
 #shapes-3d-options {
-    position: absolute;
-    left: 100%; /* Panelin tam sağına yapış */
-    margin-left: 10px; /* Biraz boşluk bırak */
-    top: 0; /* JS ile değiştirilecek ama varsayılan 0 olsun */
-    z-index: 20;
+    position: absolute !important;
+    
+    /* Konum: Sol panelin sağına yapış */
+    left: 100% !important;
+    right: auto !important;
+    margin-left: 15px !important;
+    
+    /* ▼▼▼ ÖNEMLİ: !important YOK! ▼▼▼ */
+    /* Böylece JS bunu değiştirebilir */
+    top: 0; 
+    
+    /* Görsel Stil */
+    width: 220px;
+    background-color: rgba(10, 10, 31, 0.95);
+    border: 2px solid #ff00ff;
+    border-radius: 15px;
+    padding: 10px;
+    
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 2000;
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
 }
 
-/* --- 3D ALT MENÜLER (YAN TARAFA AÇILAN) --- */
+/* 2. ALT MENÜLER (Prizma/Piramit Listeleri) - SAĞA AÇILSIN */
 .tool-options-sub {
-    position: absolute;       /* Bağımsız hareket etsin (Üstüne binmek yerine) */
-    left: 100%;               /* Ana kutunun tam sağ bitimine yapışsın */
-    width: 200px;             /* Genişliği */
+    position: absolute !important;
     
-    background-color: rgba(10, 10, 31, 0.95); /* Arka planı koyu olsun (Alttaki görünmesin) */
-    border: 2px solid #ff00ff; /* Pembe Çerçeve */
-    border-radius: 0 10px 10px 10px; /* Köşeleri hafif yuvarla */
+    /* ▼▼▼ YÖNÜ SAĞA ÇEVİRİYORUZ ▼▼▼ */
+    left: 100% !important;  /* Ana menünün sağına git */
+    right: auto !important; /* Sola gitmeyi iptal et */
+    
+    top: 0;
+    margin-left: 10px;      /* Biraz boşluk */
+    margin-right: 0 !important;
+    
+    width: 180px;
+    background-color: rgba(10, 10, 31, 0.95);
+    border: 2px solid #ff00ff;
+    border-radius: 10px;
     padding: 5px;
-    margin-left: 5px;         /* Ana kutudan 5px uzak olsun */
-    z-index: 25;              /* En üstte görünsün */
+    z-index: 2005; /* Ana menünün de üstünde olsun */
     
-    /* Başlangıçta gizli */
-    display: none; 
+    display: none;
     flex-direction: column;
 }
 
-/* JS ile menü açıldığında (hidden sınıfı kalkınca) görünür yap */
+/* Görünür olduğunda kutu gibi davran */
+#shapes-3d-options:not(.hidden),
 .tool-options-sub:not(.hidden) {
-    display: flex;
+    display: flex !important;
+}
+
+
+/* 3D Alt Menüleri (Prizmalar/Piramitler açılınca) */
+/* Onları da bu menünün SOLUNA açalım ki ekran dışına taşmasın */
+.tool-options-sub {
+    left: auto !important;
+    right: 100% !important; /* Ana menünün soluna yapış */
+    margin-right: 10px;
+    margin-left: 0;
+    
+    border-radius: 10px 0 10px 10px; /* Köşeleri uygun hale getir */
 }
 
 /* --- ALT SEÇENEK BUTONLARI (Üçgen Prizma vb.) --- */
@@ -1205,4 +1276,121 @@ body.cursor-snapshot {
     color: #fff;
     transform: rotate(-45deg);
     display: block;
+}
+
+/* --- style.css SONUNA EKLE --- */
+
+/* Pembe Neon Sürgü (Açınım İçin) */
+.neon-slider-pink {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    background: #0d0d2b;
+    border: 1px solid #ff00ff;
+    border-radius: 3px;
+    outline: none;
+    box-shadow: 0 0 5px #ff00ff;
+}
+
+.neon-slider-pink::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #00ffff; /* Zıtlık olsun diye Cyan */
+    cursor: pointer;
+    box-shadow: 0 0 10px #00ffff;
+    border: 2px solid #fff;
+    margin-top: -6px;
+}
+
+.neon-slider-pink::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #00ffff;
+    cursor: pointer;
+    box-shadow: 0 0 10px #00ffff;
+    border: 2px solid #fff;
+}
+
+/* Sadece 3D aracı seçiliyken bu kutuyu göster */
+.tool-sub-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+/* --- style.css EN ALTA EKLE --- */
+
+/* 1. Sol Panelin dışarı taşmaya izin vermesini sağla */
+.left-panel {
+    overflow: visible !important; /* KİLİT NOKTA BURASI: Gizlemeyi kapatır */
+    z-index: 1000 !important;
+}
+
+/* 2. 3D Menüsünü Sol Panelin SAĞINA Yapıştır */
+#shapes-3d-options {
+    position: absolute !important;
+    
+    /* Konum: Sol panelin sağına yapış */
+    left: 100% !important;
+    margin-left: 15px !important;
+    
+    /* ▼▼▼ DÜZELTME: !important KALDIRILDI ▼▼▼ */
+    /* Böylece JavaScript, butonun hizasına (offsetTop) kaydırabilecek */
+    top: 0; 
+    /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
+    
+    /* Görsel Stil */
+    width: 220px;
+    background-color: rgba(10, 10, 31, 0.95);
+    border: 2px solid #ff00ff;
+    border-radius: 15px;
+    padding: 10px;
+    
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1005;
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
+}
+/* Menü "hidden" sınıfı kalktığında görünür olsun */
+#shapes-3d-options:not(.hidden) {
+    display: flex !important;
+}
+
+/* --- style.css EN ALTA EKLE --- */
+
+/* 1. Ana 3D Menüsü (Sol Panelin Sağına) */
+#shapes-3d-options {
+    position: absolute !important;
+    left: 100% !important;
+    right: auto !important;
+    margin-left: 15px !important;
+    
+    /* Varsayılan olarak görünür yapıp JS ile yöneteceğiz */
+    z-index: 2000 !important;
+}
+
+/* 2. Alt Menüler (Prizmalar/Piramitler) - SAĞA AÇILACAK */
+.tool-options-sub {
+    position: absolute !important;
+    
+    /* Ana menünün SAĞINA yapıştır */
+    left: 100% !important;
+    right: auto !important; 
+    top: 0 !important; /* Butonun hizasından başla */
+    
+    margin-left: 5px !important; /* Biraz boşluk */
+    margin-right: 0 !important;
+    
+    width: 180px;
+    background-color: rgba(10, 10, 31, 0.95);
+    border: 2px solid #ff00ff;
+    border-radius: 10px;
+    padding: 5px;
+    z-index: 2001 !important; /* Ana menünün üstünde */
 }
