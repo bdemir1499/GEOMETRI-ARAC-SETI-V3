@@ -2836,6 +2836,8 @@ window.Scene3D = {
             this.resizeHandleBtn.addEventListener(evt, (e) => startInteract('isResizingHandle', e), {passive: false});
         });
 
+
+
         window.addEventListener('touchmove', (e) => {
             if (this.isRotatingHandle || this.isResizingHandle) {
                 e.preventDefault();
@@ -2870,354 +2872,201 @@ window.Scene3D = {
         }
     },
 
-    // --- ANİMASYON SÜRGÜSÜ ---
-    updateUnfold: function(value) {
-        const percent = value / 100;
-        if (!this.currentMesh) return;
-        if (!this.currentMesh.userData.isUnfoldable && value > 0) {
-            this.convertToUnfoldable(this.currentMesh);
-        }
-        if (this.currentMesh.userData.isUnfoldable) {
-            this.animateUnfold(this.currentMesh, percent);
-        }
+
+// --- YARDIMCI: EKRAN KOORDİNATLARINI NORME ET ---
+    getNormalizedCoords: function(clientX, clientY) {
+        // Eğer renderer veya domElement yoksa hata vermesin diye kontrol
+        if (!this.renderer || !this.renderer.domElement) return { x: 0, y: 0 };
+
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        return {
+            x: ((clientX - rect.left) / rect.width) * 2 - 1,
+            y: -((clientY - rect.top) / rect.height) * 2 + 1
+        };
     },
 
-    // --- DÖNÜŞTÜRME (ESKİYİ SİL YENİYİ YAP) ---
-    convertToUnfoldable: function(oldMesh) {
-        const type = oldMesh.userData.type;
-        const size = oldMesh.userData.baseSize;
-        const height = oldMesh.userData.height;
-        const oldPos = oldMesh.position.clone();
-        const oldRot = oldMesh.rotation.clone();
-        const oldScale = oldMesh.scale.x;
-
-        // Temizlik
-        if (oldMesh.userData.labelElement) {
-            oldMesh.userData.labelElement.remove();
-            oldMesh.userData.labelElement = null;
-        }
-        if(this.hideEdgeLabels) this.hideEdgeLabels();
+// --- ZEMİN KOORDİNATINI BUL ---
+    get3DPointOnFloor: function(clientX, clientY) {
+        if (!this.raycaster || !this.camera) return new THREE.Vector3(0,0,0);
         
-        this.scene.remove(oldMesh);
+        const coords = this.getNormalizedCoords(clientX, clientY);
+        this.raycaster.setFromCamera(coords, this.camera);
         
-        // Bellek Temizliği
-        if (oldMesh.geometry) oldMesh.geometry.dispose();
-        if (oldMesh.material) {
-            if(Array.isArray(oldMesh.material)) oldMesh.material.forEach(m => m.dispose());
-            else oldMesh.material.dispose();
-        }
-
-        // Yeni Grubu Seç
-        let newGroup;
-        if (type === 'sphere') newGroup = this.createUnfoldableSphere(size);
-        else if (type === 'pyramid_cone') newGroup = this.createUnfoldablePyramid(32, size, height, true);
-        else if (type.startsWith('pyramid')) {
-            let sides = 4;
-            if (type === 'pyramid_3') sides = 3;
-            else if (type === 'pyramid_5') sides = 5;
-            else if (type === 'pyramid_6') sides = 6;
-            newGroup = this.createUnfoldablePyramid(sides, size, height, false);
-        } else if (type.startsWith('prism')) {
-            let sides = 4;
-            if (type === 'prism_3') sides = 3;
-            else if (type === 'prism_5') sides = 5;
-            else if (type === 'prism_6') sides = 6;
-            else if (type === 'prism_cylinder') sides = 32;
-            newGroup = this.createUnfoldablePrism(sides, size, height, type);
-        } else {
-            this.scene.add(oldMesh);
-            return;
-        }
-
-        // Konumlandır (Zeminden 0.05 birim yukarıda, titremesin diye)
-        newGroup.position.copy(oldPos);
-        newGroup.position.y += 0.05; 
-        newGroup.rotation.copy(oldRot);
-        newGroup.scale.set(oldScale, oldScale, oldScale);
+        const intersection = new THREE.Vector3();
+        // Zemin düzlemiyle (plane) kesişimi bul
+        const result = this.raycaster.ray.intersectPlane(this.plane, intersection);
         
-        newGroup.userData = { type: type, baseSize: size, height: height, isUnfoldable: true };
-        
-        this.scene.add(newGroup);
-        this.currentMesh = newGroup;
-        
-        // Şekli "Kapalı" başlat
-        this.animateUnfold(newGroup, 0);
-        this.updateHandlePositions();
+        // Eğer kesişim varsa o noktayı, yoksa null döndür
+        return result ? intersection : null;
     },
 
-    // -----------------------------------------------------------
-    // A. PRİZMA OLUŞTURUCU (GARANTİ HAÇ YÖNTEMİ - TEK EKSEN)
-    // -----------------------------------------------------------
-    createUnfoldablePrism: function(sides, radius, height, type) {
-        const group = new THREE.Group();
-        const mat = new THREE.MeshPhongMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-
-        const isRectOrCube = (type === 'prism_rect' || type === 'prism_4' || type === 'prism_cube');
-        const animParts = [];
-
-        // 1. KÜP ve DİKDÖRTGEN PRİZMA (MANUEL 6 YÜZEY)
-        if (isRectOrCube) {
-            let widthX, depthZ;
-            if (type === 'prism_rect') { widthX = radius * 1.5; depthZ = radius; }
-            else { widthX = (type === 'prism_cube') ? radius * 2 : radius * 1.5; depthZ = widthX; }
-
-            // 1. TABAN (MERKEZ)
-            const baseGeo = new THREE.PlaneGeometry(widthX, depthZ);
-            const baseMesh = new THREE.Mesh(baseGeo, mat);
-            baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
-            group.add(baseMesh);
-
-            const distRight = widthX / 2;
-            const distLeft = -widthX / 2;
-            const distFront = depthZ / 2;
-            const distBack = -depthZ / 2;
-
-            // Yan yüzey oluşturma fonksiyonu
-            const createSideFace = (w, hx, hz, ry, axis, openAngle) => {
-                const hinge = new THREE.Group();
-                hinge.position.set(hx, 0, hz);
-                hinge.rotation.y = ry; 
-                baseMesh.add(hinge);
-
-                const geo = new THREE.PlaneGeometry(w, height);
-                geo.translate(0, height / 2, 0); // Pivot alt kenar
-
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), lineMat));
-                hinge.add(mesh);
-
-                animParts.push({ mesh: hinge, axis: axis, closedAngle: 0, openAngle: openAngle });
-                return mesh;
-            };
-
-            // 2. ARKA YÜZ (-Z): X ekseninde -90 derece (Geriye)
-            const backMesh = createSideFace(widthX, 0, distBack, 0, 'x', -Math.PI / 2);
-
-            // 3. ÖN YÜZ (+Z): X ekseninde +90 derece (Öne)
-            createSideFace(widthX, 0, distFront, Math.PI, 'x', -Math.PI / 2);
-
-            // 4. SAĞ YÜZ (+X): Z ekseninde -90 derece (Sağa)
-            // Hinge Y ekseninde -90 döndüğü için, onun lokal X'i global Z, lokal Z'si global X olur.
-            // Bu yüzden 'x' ekseninde döndürüyoruz (çünkü menteşe döndü).
-            createSideFace(depthZ, distRight, 0, -Math.PI/2, 'x', -Math.PI / 2);
-
-            // 5. SOL YÜZ (-X): 
-            createSideFace(depthZ, distLeft, 0, Math.PI/2, 'x', -Math.PI / 2);
-
-            // 6. ÜST TABAN (ARKA YÜZÜN UCUNDA)
-            const topHinge = new THREE.Group();
-            topHinge.position.set(0, height, 0); // Arka yüzün tepesi
-            backMesh.add(topHinge); 
-
-            const topGeo = new THREE.PlaneGeometry(widthX, depthZ);
-            // Pivotu kenara al (Y ekseninde ileriye)
-            topGeo.translate(0, depthZ / 2, 0);
-
-            const topMesh = new THREE.Mesh(topGeo, mat);
-            topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-            topHinge.add(topMesh);
-
-            animParts.push({ mesh: topHinge, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
-
-        } else {
-            // ÇOKGENLER (PAPATYA)
-            const sideWidth = 2 * radius * Math.sin(Math.PI / sides);
-            const apothem = radius * Math.cos(Math.PI / sides);
-
-            // Taban
-            const baseGeo = new THREE.CircleGeometry(radius, sides);
-            baseGeo.rotateX(-Math.PI / 2);
-            baseGeo.rotateY(Math.PI / sides + Math.PI/2); 
-            const baseMesh = new THREE.Mesh(baseGeo, mat);
-            baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
-            group.add(baseMesh);
-
-            const angleStep = (Math.PI * 2) / sides;
-            let backFaceMesh = null;
-
-            for(let i=0; i<sides; i++) {
-                const angle = i * angleStep;
-                const hinge = new THREE.Group();
-                hinge.position.set(Math.sin(angle) * apothem, 0, -Math.cos(angle) * apothem);
-                hinge.rotation.y = -angle; 
-                baseMesh.add(hinge);
-
-                const sideGeo = new THREE.PlaneGeometry(sideWidth, height);
-                sideGeo.translate(0, height / 2, 0);
-                
-                const mesh = new THREE.Mesh(sideGeo, mat);
-                mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(sideGeo), lineMat));
-                hinge.add(mesh);
-
-                animParts.push({ mesh: hinge, axis: 'x', closedAngle: 0, openAngle: -Math.PI / 2 });
-
-                if (i === 0) backFaceMesh = mesh; 
-            }
-
-            // Üst Taban
-            if (backFaceMesh) {
-                const topHinge = new THREE.Group();
-                topHinge.position.set(0, height, 0);
-                backFaceMesh.add(topHinge);
-
-                const topGeo = new THREE.CircleGeometry(radius, sides);
-                topGeo.rotateX(-Math.PI/2); 
-                topGeo.rotateY(Math.PI/sides + Math.PI/2);
-                topGeo.translate(0, apothem, 0); // Y ekseninde (BackFace'in lokal koordinatı) ileri
-
-                const topMesh = new THREE.Mesh(topGeo, mat);
-                topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-                topHinge.add(topMesh);
-
-                animParts.push({ mesh: topHinge, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
-            }
-        }
-
-        group.userData.animParts = animParts;
-        return group;
-    },
-
-    // --- 2. PİRAMİT OLUŞTURUCU ---
-    createUnfoldablePyramid: function(sides, radius, height, isCone) {
-        const group = new THREE.Group();
-        const mat = new THREE.MeshPhongMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-
-        const baseGeo = new THREE.CircleGeometry(radius, sides);
-        baseGeo.rotateX(-Math.PI / 2);
-        if (!isCone) baseGeo.rotateY(Math.PI / sides + Math.PI/2); 
-        const baseMesh = new THREE.Mesh(baseGeo, mat);
-        baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
-        group.add(baseMesh);
-
-        const angleStep = (Math.PI * 2) / sides;
-        const sideLen = 2 * radius * Math.sin(Math.PI / sides);
-        const apothem = radius * Math.cos(Math.PI / sides);
-        const tiltAngle = Math.atan2(height, apothem); 
+    // --- ŞEKİL GEOMETRİSİ OLUŞTURUCU ---
+    createGeometry: function(type, size) {
+        const height = size * 2; 
         
-        const animParts = [];
+        // Hata önleyici: Eğer THREE tanımlı değilse boş dön
+        if (typeof THREE === 'undefined') return null;
 
-        for (let i = 0; i < sides; i++) {
-            const angle = i * angleStep;
-            const hinge = new THREE.Group();
-            hinge.position.set(Math.cos(angle) * apothem, 0, Math.sin(angle) * apothem);
-            hinge.rotation.y = -angle + Math.PI/2;
-            baseMesh.add(hinge);
-
-            const triShape = new THREE.Shape();
-            triShape.moveTo(-sideLen/2, 0);
-            triShape.lineTo(sideLen/2, 0);
-            const slantHeight = Math.sqrt(height*height + apothem*apothem);
-            triShape.lineTo(0, slantHeight); 
-            triShape.lineTo(-sideLen/2, 0);
-            const triGeo = new THREE.ShapeGeometry(triShape);
-            const triMesh = new THREE.Mesh(triGeo, mat);
-            if (!isCone) triMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(triGeo), lineMat));
-            hinge.add(triMesh);
+        switch (type) {
+            case 'pyramid_cone': return new THREE.ConeGeometry(size, height, 32);
+            case 'sphere': return new THREE.SphereGeometry(size, 32, 32);
+            case 'prism_cube': return new THREE.BoxGeometry(size * 2, size * 2, size * 2);
+            case 'prism_cylinder': return new THREE.CylinderGeometry(size, size, height, 32);
+            case 'prism_3': return new THREE.CylinderGeometry(size, size, height, 3); 
+            case 'prism_4': return new THREE.BoxGeometry(size*1.5, size*1.5, height); 
+            case 'prism_rect': return new THREE.BoxGeometry(size * 1.5, size, height); 
+            case 'prism_5': return new THREE.CylinderGeometry(size, size, height, 5); 
+            case 'prism_6': return new THREE.CylinderGeometry(size, size, height, 6); 
+            case 'pyramid_3': return new THREE.ConeGeometry(size, height, 3);
+            case 'pyramid_4': return new THREE.ConeGeometry(size, height, 4); 
+            case 'pyramid_4_duz': return new THREE.ConeGeometry(size, size * Math.sqrt(2), 3); 
+            case 'pyramid_rect': return new THREE.ConeGeometry(size, height, 4); 
+            case 'pyramid_5': return new THREE.ConeGeometry(size, height, 5);
+            case 'pyramid_6': return new THREE.ConeGeometry(size, height, 6);
             
-            animParts.push({ 
-                mesh: triMesh, 
-                axis: 'x', 
-                closedAngle: tiltAngle - Math.PI/2, 
-                openAngle: -Math.PI/2 
-            });
+            // Varsayılan olarak Küre
+            default: return new THREE.SphereGeometry(size, 32, 32);
         }
-        group.userData.animParts = animParts;
-        return group;
     },
 
-    // --- 3. KÜRE OLUŞTURUCU ---
-    createUnfoldableSphere: function(radius) {
-        const group = new THREE.Group();
-        const mat = new THREE.MeshPhongMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-        const segments = 8; 
-        const animParts = [];
-        
-        for (let i = 0; i < segments; i++) {
-            const phiStart = (i * 2 * Math.PI) / segments;
-            const phiLength = (2 * Math.PI) / segments;
-            const goreGeo = new THREE.SphereGeometry(radius, 4, 16, 0, phiLength, 0, Math.PI);
-            const hinge = new THREE.Group();
-            hinge.position.set(0, -radius, 0); 
-            hinge.rotation.y = phiStart; 
-            const mesh = new THREE.Mesh(goreGeo, mat);
-            mesh.add(new THREE.LineSegments(new THREE.WireframeGeometry(goreGeo), lineMat));
-            mesh.position.set(0, radius, 0); 
-            hinge.add(mesh);
-            group.add(hinge);
-            animParts.push({ mesh: hinge, axis: 'x', closedAngle: 0, openAngle: Math.PI / 2 });
-        }
-        group.userData.animParts = animParts;
-        return group;
-    },
-
-    // --- ORTAK ANİMASYON FONKSİYONU ---
-    animateUnfold: function(group, percent) {
+    // --- ANİMASYON SÜRGÜSÜ ---
+    animateUnfold: function(group, value) {
         if (!group.userData.animParts) return;
-        group.userData.animParts.forEach(part => {
-            const currentAngle = part.closedAngle + (part.openAngle - part.closedAngle) * percent;
+        
+        const parts = group.userData.animParts;
+        const totalParts = parts.length;
+        
+        // Sürgünün 0-100 aralığını parça sayısına bölüyoruz.
+        const stepSize = 100 / totalParts;
+
+        parts.forEach((part, index) => {
+            // Bu parçanın hareket etmesi gereken aralık:
+            const startThreshold = index * stepSize;
+            
+            // Mevcut sürgü değeri bu aralığın neresinde? (0.0 ile 1.0 arası)
+            let localPercent = (value - startThreshold) / stepSize;
+            
+            // Sınırları koru (0'ın altına inmesin, 1'in üstüne çıkmasın)
+            localPercent = Math.max(0, Math.min(1, localPercent));
+
+            // Açıyı hesapla
+            const currentAngle = part.closedAngle + (part.openAngle - part.closedAngle) * localPercent;
+
+            // Dönüşü uygula
             if (part.axis === 'x') part.mesh.rotation.x = currentAngle;
             else if (part.axis === 'y') part.mesh.rotation.y = currentAngle;
             else if (part.axis === 'z') part.mesh.rotation.z = currentAngle;
         });
     },
 
-    // --- YARDIMCILAR ---
-    getNormalizedCoords: function(clientX, clientY) {
-        const rect = this.renderer.domElement.getBoundingClientRect();
-        return { x: ((clientX - rect.left) / rect.width) * 2 - 1, y: -((clientY - rect.top) / rect.height) * 2 + 1 };
-    },
-    get3DPointOnFloor: function(clientX, clientY) {
-        const coords = this.getNormalizedCoords(clientX, clientY);
-        this.raycaster.setFromCamera(coords, this.camera);
-        const intersection = new THREE.Vector3();
-        this.raycaster.ray.intersectPlane(this.plane, intersection);
-        return intersection;
-    },
-    toScreenPosition: function(obj, vector) {
-        const widthHalf = 0.5 * this.renderer.domElement.width;
-        const heightHalf = 0.5 * this.renderer.domElement.height;
-        const v = vector.clone();
-        v.project(this.camera);
-        return { x: (v.x * widthHalf) + widthHalf, y: -(v.y * heightHalf) + heightHalf };
-    },
-    updateHandlePositions: function() {
-        const isDrawingTool = window.currentTool !== 'move';
-        if (!this.currentMesh || isDrawingTool) {
-            this.handles.center = { x: -9999, y: -9999 };
-            if(this.rotateHandleBtn) this.rotateHandleBtn.style.display = 'none';
-            if(this.resizeHandleBtn) this.resizeHandleBtn.style.display = 'none';
-            return;
+    // --- GÜVENLİ DÖNÜŞTÜRME FONKSİYONU (FIXED) ---
+    convertToUnfoldable: function(oldMesh) {
+        // 1. Güvenlik Kontrolü
+        if (!oldMesh || !oldMesh.userData) return;
+        
+        console.log("Dönüştürme deneniyor:", oldMesh.userData.type);
+
+        // 2. Verileri Güvenli Al (Eksikse varsayılan değer ata)
+        const type = oldMesh.userData.type;
+        // baseSize yoksa 1 kabul et, height yoksa size*2 kabul et
+        const size = (oldMesh.userData.baseSize !== undefined) ? oldMesh.userData.baseSize : 100; 
+        const height = (oldMesh.userData.height !== undefined) ? oldMesh.userData.height : (size * 2);
+        
+        // Pozisyon yedekleri
+        const oldPos = oldMesh.position.clone();
+        const oldRot = oldMesh.rotation.clone();
+        const oldScale = oldMesh.scale.x || 1; 
+
+        // 3. YENİ ŞEKLİ OLUŞTURMA DENEMESİ (Eskisini silmeden önce!)
+        let newGroup = null;
+
+        try {
+            // Şekil tipine göre doğru oluşturucuyu seç
+            if (type === 'sphere') {
+                if(this.createUnfoldableSphere) newGroup = this.createUnfoldableSphere(size);
+            } 
+            else if (type === 'pyramid_cone') {
+                if(this.createUnfoldablePyramid) newGroup = this.createUnfoldablePyramid(32, size, height, true);
+            } 
+            else if (type && type.startsWith('pyramid')) {
+                // Piramit Kenar Sayısı
+                let sides = 4;
+                if (type === 'pyramid_3') sides = 3;
+                else if (type === 'pyramid_5') sides = 5;
+                else if (type === 'pyramid_6') sides = 6;
+                
+                if(this.createUnfoldablePyramid) newGroup = this.createUnfoldablePyramid(sides, size, height, false);
+            } 
+            else if (type && (type.startsWith('prism') || type === 'cube' || type === 'prism_rect')) {
+                // Prizma Kenar Sayısı
+                let sides = 4; // Varsayılan (Kare/Dikdörtgen)
+                if (type === 'prism_3') sides = 3;
+                else if (type === 'prism_5') sides = 5;
+                else if (type === 'prism_6') sides = 6;
+                else if (type === 'prism_cylinder') sides = 32;
+
+                if (typeof this.createUnfoldablePrism === 'function') {
+                    // Type bilgisini de gönderiyoruz ki dikdörtgeni ayırt edebilsin
+                    newGroup = this.createUnfoldablePrism(sides, size, height, type);
+                }
+            }
+
+            // 4. BAŞARI KONTROLÜ VE DEĞİŞİM
+            if (newGroup) {
+                // A) Eski şekli şimdi silebiliriz
+                this.scene.remove(oldMesh);
+                
+                // Etiket temizliği
+                if (oldMesh.userData.labelElement) {
+                    oldMesh.userData.labelElement.remove();
+                    oldMesh.userData.labelElement = null;
+                }
+                if(this.hideEdgeLabels) this.hideEdgeLabels();
+                
+                // Bellek temizliği (Opsiyonel ama iyi olur)
+                if (oldMesh.geometry) oldMesh.geometry.dispose();
+
+                // B) Yeni şekli yerleştir
+                newGroup.position.copy(oldPos);
+                // Hafif yukarı al (z-fighting önlemek için)
+                if(newGroup.position.y < 0.1) newGroup.position.y += 0.05; 
+                
+                newGroup.rotation.copy(oldRot);
+                newGroup.scale.set(oldScale, oldScale, oldScale);
+                
+                // Verileri aktar
+                newGroup.userData = { 
+                    type: type, 
+                    baseSize: size, 
+                    height: height, 
+                    isUnfoldable: true,
+                    animParts: newGroup.userData.animParts 
+                };
+                
+                this.scene.add(newGroup);
+                this.currentMesh = newGroup;
+                this.updateHandlePositions();
+                
+                // Animasyonu başlat (Kapalı konumda)
+                this.animateUnfold(newGroup, 0);
+                
+                console.log("Dönüştürme BAŞARILI!");
+            } else {
+                console.warn("Yeni şekil oluşturulamadı (Fonksiyon eksik veya null döndü). Eski şekil korundu.");
+            }
+
+        } catch (err) {
+            console.error("Dönüştürme sırasında HATA:", err);
+            // Hata olsa bile eski şekil silinmediği için ekranda kalmaya devam eder.
+            // Kullanıcıya hissettirmeden işlemi iptal ederiz.
         }
-        const mesh = this.currentMesh;
-        mesh.updateMatrixWorld();
-        const worldCenter = new THREE.Vector3().setFromMatrixPosition(mesh.matrixWorld);
-        const screenCenter = this.toScreenPosition(mesh, worldCenter);
-        this.handles.center = screenCenter;
-        const scale = mesh.scale.x;
-        const baseSize = mesh.userData.baseSize || 1; 
-        const worldRadius = baseSize * scale;
-        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion).normalize();
-        const worldEdge = worldCenter.clone().add(cameraRight.multiplyScalar(worldRadius));
-        const screenEdge = this.toScreenPosition(mesh, worldEdge);
-        const pixelRadius = Math.hypot(screenEdge.x - screenCenter.x, screenEdge.y - screenCenter.y);
-        const offset = pixelRadius + 25; 
-        if(this.rotateHandleBtn) {
-            this.rotateHandleBtn.style.display = 'flex';
-            this.rotateHandleBtn.style.left = (screenCenter.x - 12) + 'px'; 
-            this.rotateHandleBtn.style.top = (screenCenter.y - offset - 30) + 'px'; 
-        }
-        if(this.resizeHandleBtn) {
-            const angle45 = Math.PI / 4;
-            const rX = Math.cos(angle45) * offset;
-            const rY = Math.sin(angle45) * offset;
-            this.resizeHandleBtn.style.display = 'flex';
-            this.resizeHandleBtn.style.left = (screenCenter.x + rX - 12) + 'px';
-            this.resizeHandleBtn.style.top = (screenCenter.y + rY - 12) + 'px';
-        }
     },
+
+
+
+
+
+
     updateLabelPosition: function(mesh) {
         if (!mesh || !mesh.userData.labelElement) return;
         const label = mesh.userData.labelElement;
@@ -3239,6 +3088,7 @@ window.Scene3D = {
         label.style.left = `${labelLeft}px`;
         label.style.top = `${labelTop}px`;
     },
+
     createGeometry: function(type, size) {
         const height = size * 2; 
         switch (type) {
@@ -3260,7 +3110,11 @@ window.Scene3D = {
             default: return new THREE.SphereGeometry(size, 32, 32);
         }
     },
-    onDown: function(x, y) {
+
+
+
+
+ onDown: function(x, y) {
         if (!this.isInit) return false;
         if (this.isRotatingHandle || this.isResizingHandle) return true;
         const coords = this.getNormalizedCoords(x, y);
@@ -3500,226 +3354,26 @@ window.Scene3D = {
         this.initialPinchScale = this.currentMesh.scale.x; 
     },
  
-    // --- ANİMASYON SÜRGÜSÜ (GÜNCELLENMİŞ) ---
-    updateUnfold: function(value) {
-        const percent = value / 100;
-        if (!this.currentMesh) return;
-        
-        // Eğer şekil henüz açılabilir formata çevrilmediyse çevir
-        if (!this.currentMesh.userData.isUnfoldable && value > 0) {
-            this.convertToUnfoldable(this.currentMesh);
-        }
-        
-        // Animasyonu uygula
-        if (this.currentMesh.userData.isUnfoldable) {
-            this.animateUnfold(this.currentMesh, percent);
-        }
-    },
 
-    // --- DÖNÜŞTÜRME (SİL VE YENİDEN OLUŞTUR) ---
-    convertToUnfoldable: function(oldMesh) {
-        const type = oldMesh.userData.type;
-        const size = oldMesh.userData.baseSize;
-        const height = oldMesh.userData.height;
-        const oldPos = oldMesh.position.clone();
-        const oldRot = oldMesh.rotation.clone();
-        const oldScale = oldMesh.scale.x;
-
-        // Eski etiketleri temizle
-        if (oldMesh.userData.labelElement) {
-            oldMesh.userData.labelElement.remove();
-            oldMesh.userData.labelElement = null;
-        }
-        if(this.hideEdgeLabels) this.hideEdgeLabels();
-        
-        // Eski şekli sil
-        this.scene.remove(oldMesh);
-        if (this.previewLine) {
-            this.scene.remove(this.previewLine);
-            this.previewLine = null;
-        }
-        
-        // Bellek temizliği
-        if (oldMesh.geometry) oldMesh.geometry.dispose();
-        if (oldMesh.material) {
-            if(Array.isArray(oldMesh.material)) oldMesh.material.forEach(m => m.dispose());
-            else oldMesh.material.dispose();
-        }
-
-        // Yeni grubu oluştur
-        let newGroup;
-        if (type === 'sphere') {
-            newGroup = this.createUnfoldableSphere(size);
-        } else if (type === 'pyramid_cone') {
-            newGroup = this.createUnfoldablePyramid(32, size, height, true); 
-        } else if (type.startsWith('pyramid')) {
-            let sides = 4;
-            if (type === 'pyramid_3') sides = 3; 
-            else if (type === 'pyramid_5') sides = 5; 
-            else if (type === 'pyramid_6') sides = 6;
-            newGroup = this.createUnfoldablePyramid(sides, size, height, false);
-        } else if (type.startsWith('prism')) {
-            let sides = 4;
-            if (type === 'prism_3') sides = 3; 
-            else if (type === 'prism_5') sides = 5; 
-            else if (type === 'prism_6') sides = 6; 
-            else if (type === 'prism_cylinder') sides = 32;
-            newGroup = this.createUnfoldablePrism(sides, size, height, type);
-        } else {
-            this.scene.add(oldMesh); 
-            return;
-        }
-
-        // Konumlandır (Zeminden çok az yukarıda)
-        newGroup.position.copy(oldPos);
-        newGroup.position.y += 0.05; 
-        newGroup.rotation.copy(oldRot);
-        newGroup.scale.set(oldScale, oldScale, oldScale);
-        
-        newGroup.userData = { type: type, baseSize: size, height: height, isUnfoldable: true };
-        
-        this.scene.add(newGroup);
-        this.currentMesh = newGroup;
-        
-        // Başlangıçta Kapalı Olsun
-        this.animateUnfold(newGroup, 0);
-        this.updateHandlePositions();
-    },
-
-    // -----------------------------------------------------------
-    // A. PRİZMA OLUŞTURUCU (MESH ROTASYONU İLE - EN SAĞLAM YÖNTEM)
-    // -----------------------------------------------------------
-    createUnfoldablePrism: function(sides, radius, height, type) {
-        const group = new THREE.Group();
-        const mat = new THREE.MeshPhongMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-
-        const isRectOrCube = (type === 'prism_rect' || type === 'prism_4' || type === 'prism_cube');
-        const animParts = [];
-
-        if (isRectOrCube) {
-            let widthX, depthZ;
-            if (type === 'prism_rect') { widthX = radius * 1.5; depthZ = radius; }
-            else { widthX = (type === 'prism_cube') ? radius * 2 : radius * 1.5; depthZ = widthX; }
-
-            // 1. TABAN (Merkez)
-            const baseGeo = new THREE.PlaneGeometry(widthX, depthZ);
-            const baseMesh = new THREE.Mesh(baseGeo, mat);
-            baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
-            group.add(baseMesh);
-
-            const distRight = widthX / 2;
-            const distLeft = -widthX / 2;
-            const distFront = depthZ / 2;
-            const distBack = -depthZ / 2;
-
-            // Yan yüzey ekleme (Mesh'i X ekseninde döndürerek açacağız)
-            const addSide = (w, hx, hz, ry) => {
-                const hinge = new THREE.Group();
-                hinge.position.set(hx, 0, hz);
-                hinge.rotation.y = ry; 
-                baseMesh.add(hinge);
-
-                const geo = new THREE.PlaneGeometry(w, height);
-                geo.translate(0, height / 2, 0); // Pivot alt kenar
-                
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), lineMat));
-                hinge.add(mesh);
-
-                // DÜZELTME: Animasyon Hinge'e değil, MESH'e (X ekseninde) uygulanıyor.
-                animParts.push({ mesh: mesh, axis: 'x', closedAngle: 0, openAngle: -Math.PI / 2 });
-                return mesh;
-            };
-
-            const backMesh = addSide(widthX, 0, distBack, 0); // Arka
-            addSide(widthX, 0, distFront, Math.PI); // Ön
-            addSide(depthZ, distRight, 0, -Math.PI/2); // Sağ
-            addSide(depthZ, distLeft, 0, Math.PI/2); // Sol
-
-            // 6. ÜST TABAN (Arka Yüze Takılı)
-            const topHinge = new THREE.Group();
-            topHinge.position.set(0, height, 0);
-            backMesh.add(topHinge); 
-
-            const topGeo = new THREE.PlaneGeometry(widthX, depthZ);
-            topGeo.translate(0, depthZ / 2, 0);
-            
-            const topMesh = new THREE.Mesh(topGeo, mat);
-            topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-            topHinge.add(topMesh);
-
-            // Üst taban da Mesh üzerinde dönecek
-            animParts.push({ mesh: topMesh, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
-
-        } else {
-            // ÇOKGENLER
-            const sideWidth = 2 * radius * Math.sin(Math.PI / sides);
-            const apothem = radius * Math.cos(Math.PI / sides);
-
-            const baseGeo = new THREE.CircleGeometry(radius, sides);
-            baseGeo.rotateX(-Math.PI / 2);
-            baseGeo.rotateY(Math.PI / sides + Math.PI/2); 
-            const baseMesh = new THREE.Mesh(baseGeo, mat);
-            baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
-            group.add(baseMesh);
-
-            const angleStep = (Math.PI * 2) / sides;
-            let backFaceMesh = null;
-
-            for(let i=0; i<sides; i++) {
-                const angle = i * angleStep;
-                const hinge = new THREE.Group();
-                hinge.position.set(Math.sin(angle) * apothem, 0, -Math.cos(angle) * apothem);
-                hinge.rotation.y = -angle; 
-                baseMesh.add(hinge);
-
-                const sideGeo = new THREE.PlaneGeometry(sideWidth, height);
-                sideGeo.translate(0, height / 2, 0);
-                
-                const mesh = new THREE.Mesh(sideGeo, mat);
-                mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(sideGeo), lineMat));
-                hinge.add(mesh);
-
-                animParts.push({ mesh: mesh, axis: 'x', closedAngle: 0, openAngle: -Math.PI / 2 });
-                if (i === 0) backFaceMesh = mesh; 
-            }
-
-            if (backFaceMesh) {
-                const topHinge = new THREE.Group();
-                topHinge.position.set(0, height, 0);
-                backFaceMesh.add(topHinge);
-
-                const topGeo = new THREE.CircleGeometry(radius, sides);
-                topGeo.rotateX(-Math.PI/2); 
-                topGeo.rotateY(Math.PI/sides + Math.PI/2);
-                topGeo.translate(0, apothem, 0);
-
-                const topMesh = new THREE.Mesh(topGeo, mat);
-                topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-                topHinge.add(topMesh);
-
-                animParts.push({ mesh: topMesh, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
-            }
-        }
-
-        group.userData.animParts = animParts;
-        return group;
-    },
-
-    // -----------------------------------------------------------
-    // B. PİRAMİT OLUŞTURUCU
-    // -----------------------------------------------------------
+    
+    // --- 4. GÜNCELLENMİŞ PİRAMİT OLUŞTURUCU (NUMARALI) ---
     createUnfoldablePyramid: function(sides, radius, height, isCone) {
         const group = new THREE.Group();
         const mat = new THREE.MeshPhongMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
         const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+        let faceCounter = 1;
 
+        // TABAN (NUMARA 1)
         const baseGeo = new THREE.CircleGeometry(radius, sides);
         baseGeo.rotateX(-Math.PI / 2);
         if (!isCone) baseGeo.rotateY(Math.PI / sides + Math.PI/2); 
         const baseMesh = new THREE.Mesh(baseGeo, mat);
         baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
+        
+        const label1 = this.createLabelMesh(faceCounter++);
+        label1.rotation.x = -Math.PI/2;
+        label1.position.y = 0.02;
+        baseMesh.add(label1);
         group.add(baseMesh);
 
         const angleStep = (Math.PI * 2) / sides;
@@ -3747,8 +3401,12 @@ window.Scene3D = {
             const triMesh = new THREE.Mesh(triGeo, mat);
             if (!isCone) triMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(triGeo), lineMat));
             hinge.add(triMesh);
+
+            // Yan Yüz Etiketi
+            const label = this.createLabelMesh(faceCounter++);
+            label.position.set(0, slantHeight/3, 0.02);
+            triMesh.add(label);
             
-            // Animasyon: Mesh rotasyonu (X ekseninde)
             animParts.push({ 
                 mesh: triMesh, 
                 axis: 'x', 
@@ -3760,192 +3418,351 @@ window.Scene3D = {
         return group;
     },
 
-    // -----------------------------------------------------------
-    // C. KÜRE OLUŞTURUCU
-    // -----------------------------------------------------------
-    createUnfoldableSphere: function(radius) {
+    
+    
+
+    
+    // --- YENİLENMİŞ PİRAMİT OLUŞTURUCU (ÇİÇEK AÇILIMI) ---
+    createUnfoldablePyramid: function(sides, radius, height, isCone) {
         const group = new THREE.Group();
-        const mat = new THREE.MeshPhongMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+        const mat = new THREE.MeshPhongMaterial({ 
+            color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 
+        });
         const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-        const segments = 8; 
-        const animParts = [];
         
-        for (let i = 0; i < segments; i++) {
-            const phiStart = (i * 2 * Math.PI) / segments;
-            const phiLength = (2 * Math.PI) / segments;
-            const goreGeo = new THREE.SphereGeometry(radius, 4, 16, 0, phiLength, 0, Math.PI);
-            
+        // 1. TABAN (Zemine Yapışık)
+        const baseGeo = new THREE.CircleGeometry(radius, sides);
+        baseGeo.rotateX(-Math.PI / 2); // Yere yatır
+        // Düzgün durması için hizalama
+        if (!isCone && (sides === 3 || sides === 4)) baseGeo.rotateY(Math.PI / sides);
+
+        const baseMesh = new THREE.Mesh(baseGeo, mat);
+        baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
+        group.add(baseMesh);
+
+        // 2. YAN YÜZLER (Menteşeli)
+        const angleStep = (Math.PI * 2) / sides;
+        const apothem = radius * Math.cos(Math.PI / sides);
+        const sideLen = 2 * radius * Math.sin(Math.PI / sides);
+        const slantHeight = Math.sqrt(height * height + apothem * apothem);
+        
+        // Eğim açısı (Tabanla yan yüz arasındaki açı)
+        const tiltAngle = Math.atan2(height, apothem); 
+        
+        const animParts = [];
+
+        for (let i = 0; i < sides; i++) {
+            const angle = i * angleStep;
+
+            // Menteşe Noktası (Taban kenarı)
             const hinge = new THREE.Group();
-            hinge.position.set(0, -radius, 0); 
-            hinge.rotation.y = phiStart; 
+            hinge.position.set(Math.cos(angle) * apothem, 0, Math.sin(angle) * apothem);
+            hinge.rotation.y = -angle - Math.PI / 2; // Kenara hizala
+            baseMesh.add(hinge);
+
+            // Yan Yüz Geometrisi
+            const triShape = new THREE.Shape();
+            triShape.moveTo(-sideLen / 2, 0);
+            triShape.lineTo(sideLen / 2, 0);
+            triShape.lineTo(0, slantHeight); // Tepe noktası
+            triShape.lineTo(-sideLen / 2, 0);
+
+            const triGeo = new THREE.ShapeGeometry(triShape);
+            const triMesh = new THREE.Mesh(triGeo, mat);
+            if (!isCone) triMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(triGeo), lineMat));
+            hinge.add(triMesh);
+
+            // ANİMASYON MANTIĞI:
+            // ShapeGeometry varsayılan olarak X-Y düzlemindedir (Dikey durur, Z=0).
+            // Hinge Y ekseninde döndü. Şimdi X ekseninde yatıracağız.
             
-            const mesh = new THREE.Mesh(goreGeo, mat);
-            mesh.add(new THREE.LineSegments(new THREE.WireframeGeometry(goreGeo), lineMat));
-            mesh.position.set(0, radius, 0); 
+            // closedAngle: Piramidin kapalı hali. 
+            // Dikeyden (PI/2) -> 'tiltAngle' kadar geriye yatmalı.
+            // Formül: (Math.PI / 2) - tiltAngle değil, direkt olarak (Math.PI/2 - tiltAngle) * -1
+            // Yani: -Math.PI/2 + tiltAngle
             
-            hinge.add(mesh);
-            group.add(hinge);
+            // openAngle: Tamamen yere yatmış hali.
+            // Dikeyden (PI/2) -> Yere (PI). Fark: -PI/2
             
-            animParts.push({ mesh: hinge, axis: 'x', closedAngle: 0, openAngle: Math.PI / 2 });
+            animParts.push({ 
+                mesh: hinge, // Grubu değil hinge'i değil, içindeki mesh'i de döndürebiliriz ama hinge daha temiz.
+                // HATA DÜZELTME: ShapeGeometry X-Y düzleminde. X ekseninde döndüreceğiz.
+                axis: 'x', 
+                closedAngle: -Math.PI/2 + tiltAngle, // Tepeye kalk
+                openAngle: -Math.PI/2 // Yere tam yat
+            });
         }
+
         group.userData.animParts = animParts;
         return group;
     },
 
-    // 3. ANİMASYON MOTORU
-    animateUnfold: function(group, percent) {
-        if (!group.userData.animParts) return;
-        group.userData.animParts.forEach(part => {
+    // --- KÜRE AÇILIM OLUŞTURUCU (Portakal Dilimi Yöntemi) ---
+    createUnfoldableSphere: function(radius) {
+        const group = new THREE.Group();
+        const mat = new THREE.MeshPhongMaterial({ 
+            color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 
+        });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+        const animParts = [];
+
+        // Dilim Sayısı (Ne kadar çok olursa o kadar pürüzsüz ama yavaş olur)
+        // 12 veya 16 idealdir.
+        const segments = 16; 
+        
+        // Her bir dilimin açı genişliği
+        const segmentAngle = (Math.PI * 2) / segments;
+
+        for (let i = 0; i < segments; i++) {
+            // Menteşe (Hinge) Grubu
+            // Bu grup kürenin en altında (0,0,0) duracak ve dışarı doğru dönecek.
+            const hinge = new THREE.Group();
+            
+            // Menteşeyi kendi açısına göre döndür (Y ekseni etrafında diz)
+            const angle = i * segmentAngle;
+            hinge.rotation.y = angle;
+            
+            group.add(hinge);
+
+            // Dilim Geometrisi
+            // SphereGeometry parametreleri: radius, widthSeg, heightSeg, phiStart, phiLength...
+            // phiLength = segmentAngle yaparak sadece bir dilim alıyoruz.
+            const geo = new THREE.SphereGeometry(
+                radius, 
+                8,  // Dilim içi detay (yatay)
+                16, // Dilim içi detay (dikey)
+                0,             // phiStart (0'dan başla)
+                segmentAngle,  // phiLength (Dilim genişliği kadar)
+                0,             // thetaStart
+                Math.PI        // thetaLength (Tam yarım daire - Kutuptan kutuba)
+            );
+
+            // PİVOT AYARLAMALARI:
+            // 1. Geometri normalde merkezdedir (0,0,0). 
+            //    Bizim menteşemiz kürenin en altında (Güney Kutbu).
+            //    Kürenin merkezi, menteşenin 'radius' kadar yukarısında olmalı.
+            geo.translate(0, radius, 0);
+
+            // 2. Geometri phiStart=0'dan başlar yani kenarı merkezdedir.
+            //    Dilimi menteşenin ortasına hizalamak için yarısı kadar geri döndür.
+            geo.rotateY(-segmentAngle / 2);
+
+            const mesh = new THREE.Mesh(geo, mat);
+            
+            // Kenar çizgileri (Wireframe)
+            const edges = new THREE.EdgesGeometry(geo);
+            // Küre çizgileri çok yoğun olmasın diye sadece dış hatları çizmek zor,
+            // bu yüzden standart edges kullanıyoruz ama çok yoğunsa iptal edilebilir.
+            mesh.add(new THREE.LineSegments(edges, lineMat));
+
+            hinge.add(mesh);
+
+            // Animasyon Verisi
+            // Menteşe Y ekseninde döndü. Dışarı açılmak için X ekseninde dönmeli.
+            // Kapalıyken 0 derece (Dik).
+            // Açıkken -Math.PI/2 (veya duruma göre +) (Yere yat).
+            // Y ekseni rotasyonuna göre X ekseni teğet kalır.
+            
+            animParts.push({ 
+                mesh: hinge, 
+                axis: 'x', 
+                closedAngle: 0, 
+                openAngle: -Math.PI / 2 // Dışarı tam açıl
+            });
+        }
+
+        group.userData.animParts = animParts;
+        return group;
+    },
+
+   // --- 1. YARDIMCI: NUMARA ETİKETİ OLUŞTURUCU ---
+    createLabelMesh: function(number) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64; canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        
+        ctx.fillStyle = 'white'; 
+        ctx.fillRect(0, 0, 64, 64);
+        
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(0, 0, 64, 64);
+
+        ctx.font = 'bold 40px Arial';
+        ctx.fillStyle = 'black';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(number, 32, 32);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.MeshBasicMaterial({ map: texture, transparent: false });
+        const geometry = new THREE.PlaneGeometry(0.3, 0.3);
+        
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.z = 0.02; 
+        return mesh;
+    },
+
+    // --- 2. GÜNCELLEŞTİRİLMİŞ ANİMASYON MANTIĞI (SIRALI AÇILMA) ---
+    // Bu fonksiyon sürgüden gelen 0-100 arası değeri alır ve parçaları sırayla açar.
+    // --- app.js içindeki Scene3D nesnesine bu mantığı uygulayın ---
+
+// --- GÜNCELLENMİŞ ANİMASYON (EŞ ZAMANLI VE DOĞRUSAL) ---
+    animateUnfold: function(group, value) {
+        if (!group || !group.userData.animParts) return;
+
+        const parts = group.userData.animParts;
+        
+        // Yüzdeyi hesapla (0.0 - 1.0 arası)
+        const percent = value / 100;
+
+        parts.forEach(part => {
+            // Tüm parçalar aynı anda, sürgü oranında hareket eder
             const currentAngle = part.closedAngle + (part.openAngle - part.closedAngle) * percent;
+            
             if (part.axis === 'x') part.mesh.rotation.x = currentAngle;
             else if (part.axis === 'y') part.mesh.rotation.y = currentAngle;
             else if (part.axis === 'z') part.mesh.rotation.z = currentAngle;
         });
     },
+    // --- 2. FONKSİYON: NOKTA KONTROLÜ ---
+    isPointInPolygon: function(p, vertices) {
+        let inside = false;
+        for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+            const xi = vertices[i].x, yi = vertices[i].y;
+            const xj = vertices[j].x, yj = vertices[j].y;
+            const intersect = ((yi > p.y) !== (yj > p.y)) &&
+                (p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }, 
 
-}; // <--- Scene3D NESNESİNİN BİTİŞİ // <--- BURASI ÇOK ÖNEMLİ: Scene3D NESNESİNİN KAPANIŞI
 
-// --- NOKTA ÇOKGENİN İÇİNDE Mİ? (Ray Casting Algoritması) ---
-function isPointInPolygon(p, vertices) {
-    let inside = false;
-    for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
-        const xi = vertices[i].x, yi = vertices[i].y;
-        const xj = vertices[j].x, yj = vertices[j].y;
-        
-        const intersect = ((yi > p.y) !== (yj > p.y)) &&
-            (p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi);
-        if (intersect) inside = !inside;
-    }
-    return inside;
-}
 
-// --- MERKEZİ SİLME FONKSİYONU (GÜÇLENDİRİLMİŞ HİBRİT VERSİYON) ---
-function handleEraser(pos) {
-    let needsRedraw = false;
+    // --- 3. FONKSİYON: SİLGİ MANTIĞI (DÜZELTİLMİŞ HALİ) ---
+    handleEraser: function(pos) {
+        let needsRedraw = false;
 
-    // 1. 3D NESNE KONTROLÜ (Geri Alma uyumlu)
-    if (window.Scene3D && window.Scene3D.deleteObjectAt) {
-        // deleteObjectAt fonksiyonu true dönerse bir şey silindi demektir
-        if (window.Scene3D.deleteObjectAt(pos.x, pos.y)) {
+        // --- 1. ADIM: 3D NESNELERİ SİLME KONTROLÜ ---
+        // Eğer 3D motoru aktifse ve silme fonksiyonu varsa önce oraya bak
+        if (this.deleteObjectAt && this.deleteObjectAt(pos.x, pos.y)) {
             needsRedraw = true;
             
-            // KRİTİK EKLEME: Silinen 3D nesneyi Geri Al (Undo) listesinden de temizle
-            // Böylece Geri Al butonu boşa düşmez.
-            window.drawnStrokes = window.drawnStrokes.filter(s => {
-                if (s.type === '3D_object') {
-                    // Eğer sahneden silindiyse listeden de sil
-                    const stillExists = window.Scene3D.scene.getObjectById(s.mesh.id);
-                    return !!stillExists; 
-                }
-                return true;
-            });
-           
-        }
-    }
-
-    // 2. 2D NESNELERİ SİL (Senin kodundaki detaylı algoritmalar korundu)
-    let strokesToKeep = [];
-    let is2DDeleted = false;
-
-    for (const stroke of drawnStrokes) {
-        let touched = false;
-        
-        // 3D Nesneleri (Listede varsa) atla, zaten yukarıda hallettik
-        if (stroke.type === '3D_object') {
-            strokesToKeep.push(stroke);
-            continue;
-        }
-
-        // 1. KALEM
-        if (stroke.type === 'pen') {
-            for (const point of stroke.path) { if (distance(point, pos) < 10) { touched = true; break; } }
-        } 
-        // 2. NOKTA
-        else if (stroke.type === 'point') {
-            if (distance(stroke, pos) < 10) { touched = true; }
-        } 
-        // 3. ÇİZGİLER (Doğru, Işın, Parça)
-        else if (stroke.type === 'straightLine' || stroke.type === 'line' || stroke.type === 'segment' || stroke.type === 'ray') {
-            // Matematiksel mesafe hesabı (Daha hızlıdır)
-            if (distanceToSegment(pos, stroke.p1, stroke.p2) < 10) { touched = true; }
-            // Senin kodundaki iteratif kontrolü de yedek olarak tutabiliriz ama bu daha performanslıdır:
-            else {
-               const p1 = stroke.p1; const p2 = stroke.p2;
-               const steps = Math.max(1, Math.floor(distance(p1, p2) / 5)); 
-               for (let i = 0; i <= steps; i++) {
-                   const t = i / steps;
-                   const sampleX = p1.x + (p2.x - p1.x) * t;
-                   const sampleY = p1.y + (p2.y - p1.y) * t;
-                   if (distance({x: sampleX, y: sampleY}, pos) < 10) { touched = true; break; }
-               }
+            // Eğer 3D sahneden bir şey silindiyse, bunu ana çizim listesinden (drawnStrokes) de düşmeliyiz
+            if (window.drawnStrokes) {
+                window.drawnStrokes = window.drawnStrokes.filter(s => {
+                    if (s.type === '3D_object') {
+                        // Nesne hala sahnede var mı? (deleteObjectAt sildiyse yok olmalı)
+                        // Mesh ID'sine göre kontrol ediyoruz.
+                        const stillExists = this.scene.getObjectById(s.mesh.id);
+                        return !!stillExists; 
+                    }
+                    return true;
+                });
             }
         }
-        // 4. ÇEMBER / YAY
-        else if (stroke.type === 'arc') {
-            const centerPos = { x: stroke.cx, y: stroke.cy };
-            // Merkeze tıklandıysa sil
-            if (distance(centerPos, pos) < 10) { touched = true; } 
-            else {
-                // Çember yayı üzerinde mi?
-                const dist = distance(pos, centerPos);
-                // Yarıçap farkı 10px'den azsa sil (Senin döngü kodundan daha hızlı ve kesindir)
-                if (Math.abs(dist - stroke.radius) < 10) { touched = true; }
+
+        // --- 2. ADIM: 2D NESNELERİ SİLME KONTROLÜ ---
+        // (Bu kod bloğu daha önce fonksiyonun dışında kaldığı için hata veriyordu)
+        
+        let strokesToKeep = [];
+        let is2DDeleted = false;
+        
+        // window.drawnStrokes global olduğu için buradan erişebiliriz
+        const strokes = window.drawnStrokes || [];
+
+        for (const stroke of strokes) {
+            let touched = false;
+            
+            // 3D Nesneleri (Listede varsa) atla, zaten yukarıda hallettik
+            if (stroke.type === '3D_object') {
+                strokesToKeep.push(stroke);
+                continue;
+            }
+
+            // 1. KALEM
+            if (stroke.type === 'pen') {
+                if (stroke.path) {
+                    for (const point of stroke.path) { if (distance(point, pos) < 10) { touched = true; break; } }
+                }
+            } 
+            // 2. NOKTA
+            else if (stroke.type === 'point') {
+                if (distance(stroke, pos) < 10) { touched = true; }
+            } 
+            // 3. ÇİZGİLER (Doğru, Işın, Parça)
+            else if (stroke.type === 'straightLine' || stroke.type === 'line' || stroke.type === 'segment' || stroke.type === 'ray') {
+                if (distanceToSegment(pos, stroke.p1, stroke.p2) < 10) { touched = true; }
                 else {
-                    // Senin kodundaki hassas kontrol (Yedek)
-                    const steps = 30; 
-                    for (let i = 0; i <= steps; i++) {
-                        const angle = (stroke.startAngle + (i / steps) * (stroke.endAngle - stroke.startAngle)) * (Math.PI / 180);
-                        const sampleX = stroke.cx + stroke.radius * Math.cos(angle);
-                        const sampleY = stroke.cy + stroke.radius * Math.sin(angle);
-                        if (distance({x: sampleX, y: sampleY}, pos) < 10) { touched = true; break; }
-                    }
+                   // Yedek hassas kontrol
+                   const p1 = stroke.p1; const p2 = stroke.p2;
+                   const steps = Math.max(1, Math.floor(distance(p1, p2) / 5)); 
+                   for (let i = 0; i <= steps; i++) {
+                       const t = i / steps;
+                       const sampleX = p1.x + (p2.x - p1.x) * t;
+                       const sampleY = p1.y + (p2.y - p1.y) * t;
+                       if (distance({x: sampleX, y: sampleY}, pos) < 10) { touched = true; break; }
+                   }
                 }
             }
-        }
-        // 5. ÇOKGENLER
-        else if (stroke.type === 'polygon') {
-            if (stroke.center && distance(stroke.center, pos) < 10) { touched = true; } 
-            else if (stroke.vertices) {
-                for (const v of stroke.vertices) { if (distance(v, pos) < 10) { touched = true; break; } }
-                if (!touched) {
-                    for (let j = 0; j < stroke.vertices.length; j++) {
-                        const v1 = stroke.vertices[j];
-                        const v2 = stroke.vertices[(j + 1) % stroke.vertices.length];
-                        // Kenara yakın mı?
-                        if (distanceToSegment(pos, v1, v2) < 10) { touched = true; break; }
-                    }
+            // 4. ÇEMBER / YAY
+            else if (stroke.type === 'arc') {
+                const centerPos = { x: stroke.cx, y: stroke.cy };
+                if (distance(centerPos, pos) < 10) { touched = true; } // Merkeze tıklandıysa
+                else {
+                    const dist = distance(pos, centerPos);
+                    if (Math.abs(dist - stroke.radius) < 10) { touched = true; } // Yaya tıklandıysa
                 }
             }
-        } 
-        // 6. RESİMLER (Senin kodundaki döndürme mantığı korundu)
-        else if (stroke.type === 'image') {
-            if (!stroke.isBackground) { 
-                const dx = pos.x - stroke.x;
-                const dy = pos.y - stroke.y;
-                const angleRad = -stroke.rotation * (Math.PI / 180);
-                const localX = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
-                const localY = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
-                const halfW = stroke.width / 2;
-                const halfH = stroke.height / 2;
-                if (localX > -halfW && localX < halfW && localY > -halfH && localY < halfH) { touched = true; }
+            // 5. ÇOKGENLER
+            else if (stroke.type === 'polygon') {
+                if (stroke.center && distance(stroke.center, pos) < 10) { touched = true; } 
+                else if (stroke.vertices) {
+                    for (const v of stroke.vertices) { if (distance(v, pos) < 10) { touched = true; break; } }
+                    if (!touched) {
+                        for (let j = 0; j < stroke.vertices.length; j++) {
+                            const v1 = stroke.vertices[j];
+                            const v2 = stroke.vertices[(j + 1) % stroke.vertices.length];
+                            if (distanceToSegment(pos, v1, v2) < 10) { touched = true; break; }
+                        }
+                    }
+                }
+            } 
+            // 6. RESİMLER
+            else if (stroke.type === 'image') {
+                if (!stroke.isBackground) { 
+                    const dx = pos.x - stroke.x;
+                    const dy = pos.y - stroke.y;
+                    const angleRad = -stroke.rotation * (Math.PI / 180);
+                    const localX = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+                    const localY = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+                    const halfW = stroke.width / 2;
+                    const halfH = stroke.height / 2;
+                    if (localX > -halfW && localX < halfW && localY > -halfH && localY < halfH) { touched = true; }
+                }
+            }
+
+            if (touched) { 
+                is2DDeleted = true; 
+                needsRedraw = true;
+            } else { 
+                strokesToKeep.push(stroke); 
             }
         }
 
-        if (touched) { 
-            is2DDeleted = true; 
-            needsRedraw = true;
-        } else { 
-            strokesToKeep.push(stroke); 
+        // Eğer 2D bir şeyler silindiyse listeyi güncelle ve ekranı yenile
+        if (is2DDeleted) {
+            window.drawnStrokes = strokesToKeep;
+            if (typeof redrawAllStrokes === 'function') {
+                redrawAllStrokes(); 
+            }
         }
+
+        return needsRedraw;
     }
 
-    if (needsRedraw) {
-        drawnStrokes = strokesToKeep; 
-        window.drawnStrokes = strokesToKeep;
-        redrawAllStrokes(); 
-        
-         }
-}
+};
 
 // --- FARE BIRAKMA (MOUSEUP) - GÜÇLENDİRİLMİŞ ---
 window.addEventListener('mouseup', (e) => { // DÜZELTME: 'canvas' yerine 'window' yapıldı
@@ -4250,6 +4067,39 @@ if (currentTool.startsWith('draw_polygon_') && window.tempPolygonData && window.
     snapTarget = null; 
     snapIndicator.style.display = 'none';
 });
+
+// --- 1. ÖNCE YARDIMCI FONKSİYONU TANIMLA ---
+// Bu fonksiyon, şeklin en altındaki yüzeyi bulur ve onu sabitler.
+function markBaseFace(mesh) {
+    if (!mesh || !mesh.children || mesh.children.length === 0) return;
+
+    mesh.children.forEach(face => {
+        face.userData.isBase = false;
+        face.userData.targetAngle = Math.PI / 2; // Varsayılan 90 derece açılma
+    });
+
+    let lowestY = Infinity;
+    let baseFace = null;
+
+    mesh.children.forEach(face => {
+        // Yüzeyin dünya koordinatlarındaki pozisyonunu al
+        const worldPos = new THREE.Vector3();
+        face.getWorldPosition(worldPos);
+        
+        if (worldPos.y < lowestY) {
+            lowestY = worldPos.y;
+            baseFace = face;
+        }
+    });
+
+    if (baseFace) {
+        baseFace.userData.isBase = true;
+        baseFace.userData.targetAngle = 0; // Taban açılmaz, sabit kalır
+    }
+}
+
+
+
 // --- PDF KAPATMA MANTIĞI ---
 const closePdfBtn = document.getElementById('btn-close-pdf');
 
@@ -4498,13 +4348,729 @@ if (penWidthSlider && penWidthValueLabel) {
     });
 }
 
+// --- app.js --- (En alta ekleyin)
+
+// 1. Açınım Sürgüsünü (Slider) Seç
 const unfoldSlider = document.getElementById('unfold-slider');
+
 if (unfoldSlider) {
-    // Hem mouse hem dokunmatik için 'input' olayı yeterlidir
+    // Sürgü hareket ettiğinde (input olayı) çalışır
     unfoldSlider.addEventListener('input', (e) => {
+        // 0 ile 100 arasındaki değer
         const val = parseInt(e.target.value);
-        if (window.Scene3D) {
-            window.Scene3D.updateUnfold(val);
+
+        // 3D Sahne ve Seçili Obje var mı kontrol et
+        if (window.Scene3D && window.Scene3D.currentMesh) {
+            
+            // Şu anki aktif şekli al
+            let mesh = window.Scene3D.currentMesh;
+
+            // KONTROL: Şekil henüz "açılabilir" (unfoldable) modda değilse dönüştür
+            // Normalde şekiller çizildiğinde tek parça (solid) olur. 
+            // Sürgüye dokunulduğunda parçalara ayrılması gerekir.
+            if (!mesh.userData.isUnfoldable) {
+                // Bu fonksiyon, mevcut katı şekli siler ve yerine animasyonlu (menteşeli) versiyonunu koyar
+                if (typeof window.Scene3D.convertToUnfoldable === 'function') {
+                    window.Scene3D.convertToUnfoldable(mesh);
+                    
+                    // Dönüştürme işleminden sonra currentMesh değiştiği için yenisini alıyoruz
+                    mesh = window.Scene3D.currentMesh;
+                }
+            }
+
+            // Eğer şekil açılabilir moddaysa ve animasyon fonksiyonu varsa çalıştır
+            if (mesh && mesh.userData.isUnfoldable && typeof window.Scene3D.animateUnfold === 'function') {
+                window.Scene3D.animateUnfold(mesh, val);
+            }
         }
     });
+}
+
+// 2. Yeni bir araç seçildiğinde veya yeni çizim yapıldığında Slider'ı Sıfırla
+// (Bu fonksiyonu mevcut kodlarınızın içine entegre etmek yerine, 
+// setActiveTool veya onUp fonksiyonlarına ek yama olarak buraya koyuyorum)
+
+// Mevcut setActiveTool fonksiyonunu "dinleyerek" slider'ı sıfırlama mantığı:
+const originalSetActiveTool = window.setActiveTool; // Varsa eski fonksiyonu sakla (Global tanımlıysa)
+/* Not: app.js içinde setActiveTool 'const' veya 'let' ile değil, 
+   'function setActiveTool' ile tanımlandıysa window.setActiveTool olarak erişilebilir. */
+
+if (typeof window.setActiveTool === 'function') {
+    // Fonksiyonu override ediyoruz (üzerine yazıyoruz) ama eskisini de çağırıyoruz
+    window.setActiveTool = function(tool) {
+        // Orijinal işlemi yap
+        if (originalSetActiveTool) originalSetActiveTool(tool);
+
+        // Sürgüyü sıfırla
+        if (unfoldSlider) {
+            unfoldSlider.value = 0;
+        }
+        
+        // Eğer 3D çizim aracı değilse ve 'move' değilse, sahnedeki seçimi kaldırabiliriz (İsteğe bağlı)
+        // Ancak sizin mevcut mantığınızda 3D şekiller ekranda kalıyor, bu yüzden dokunmuyoruz.
+    };
+}
+
+// =================================================================
+// ACİL DURUM YAMASI: BU KODU app.js DOSYASININ EN ALTINA YAPIŞTIRIN
+// =================================================================
+
+// Sayfa yüklendiğinde Scene3D'nin içindeki fonksiyonu zorla değiştiriyoruz.
+if (window.Scene3D) {
+    console.log("!!! ZORLA GÜNCELLEME: Prizma Kodu Değiştiriliyor !!!");
+
+    window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
+        console.log("--- V5 (Override) ŞERİT AÇILIM ÇALIŞTI ---"); 
+
+        const group = new THREE.Group();
+        const mat = new THREE.MeshPhongMaterial({ 
+            color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 
+        });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+        const animParts = [];
+
+        // 1. BOYUTLARI AYARLA
+        let dimX = size, dimZ = size; 
+        let isPolygon = false;
+        const isCylinder = (sides > 10); 
+
+        if (type === 'prism_rect') {
+            dimX = size * 1.5; // Genişlik
+            dimZ = size;       // Derinlik
+        } else if (type === 'prism_cube' || type === 'cube') {
+            dimX = size * 2; dimZ = size * 2; height = size * 2;
+        } else {
+            isPolygon = true; 
+        }
+
+        // --- A) KÜP VE DİKDÖRTGEN PRİZMA (ZİNCİRLEME ŞERİT) ---
+        if (!isPolygon && !isCylinder) {
+            
+            // 1. MERKEZ PARÇA: ARKA YÜZ (Zeminde Sabit)
+            const backGeo = new THREE.PlaneGeometry(dimX, height);
+            backGeo.rotateX(-Math.PI / 2); // Yere yatır
+            const backMesh = new THREE.Mesh(backGeo, mat);
+            backMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(backGeo), lineMat));
+            group.add(backMesh); 
+
+            // 2. ÜST KAPAK (Arka Yüz'e bağlı)
+            const topHinge = new THREE.Group();
+            topHinge.position.set(0, 0, -height/2); 
+            backMesh.add(topHinge);
+
+            const topGeo = new THREE.PlaneGeometry(dimX, dimZ);
+            topGeo.translate(0, -dimZ/2, 0); 
+            const topMesh = new THREE.Mesh(topGeo, mat);
+            topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
+            topHinge.add(topMesh);
+
+            // AÇIKKEN 0 DERECE (DÜMDÜZ)
+            animParts.push({ mesh: topHinge, axis: 'x', closedAngle: Math.PI / 2, openAngle: 0 });
+
+            // 3. ALT KAPAK (Arka Yüz'e bağlı)
+            const bottomHinge = new THREE.Group();
+            bottomHinge.position.set(0, 0, height/2); 
+            backMesh.add(bottomHinge);
+
+            const bottomGeo = new THREE.PlaneGeometry(dimX, dimZ);
+            bottomGeo.translate(0, dimZ/2, 0); 
+            const bottomMesh = new THREE.Mesh(bottomGeo, mat);
+            bottomMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(bottomGeo), lineMat));
+            bottomHinge.add(bottomMesh);
+
+            // AÇIKKEN 0 DERECE (DÜMDÜZ)
+            animParts.push({ mesh: bottomHinge, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+            // --- ZİNCİR BAŞLIYOR (ARKA -> SAĞ -> ÖN -> SOL) ---
+
+            // 4. SAĞ YAN YÜZ (Arka Yüz'e bağlı)
+            const rightHinge = new THREE.Group();
+            rightHinge.position.set(dimX/2, 0, 0); 
+            backMesh.add(rightHinge);
+
+            const rightGeo = new THREE.PlaneGeometry(dimZ, height);
+            rightGeo.translate(dimZ/2, 0, 0); 
+            const rightMesh = new THREE.Mesh(rightGeo, mat);
+            rightMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(rightGeo), lineMat));
+            rightHinge.add(rightMesh);
+
+            // AÇIKKEN 0 DERECE (DÜMDÜZ)
+            animParts.push({ mesh: rightHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+            // 5. ÖN YÜZ (Sağ Yüz'e bağlı) -> Zincirin 2. halkası
+            const frontHinge = new THREE.Group();
+            frontHinge.position.set(dimZ, 0, 0); 
+            rightMesh.add(frontHinge); // Parent: SAĞ YÜZ
+
+            const frontGeo = new THREE.PlaneGeometry(dimX, height);
+            frontGeo.translate(dimX/2, 0, 0); 
+            const frontMesh = new THREE.Mesh(frontGeo, mat);
+            frontMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(frontGeo), lineMat));
+            frontHinge.add(frontMesh);
+
+            // AÇIKKEN 0 DERECE (DÜMDÜZ)
+            animParts.push({ mesh: frontHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+            // 6. SOL YAN YÜZ (Ön Yüz'e bağlı) -> Zincirin 3. halkası
+            const leftHinge = new THREE.Group();
+            leftHinge.position.set(dimX, 0, 0); 
+            frontMesh.add(leftHinge); // Parent: ÖN YÜZ
+
+            const leftGeo = new THREE.PlaneGeometry(dimZ, height);
+            leftGeo.translate(dimZ/2, 0, 0);
+            const leftMesh = new THREE.Mesh(leftGeo, mat);
+            leftMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(leftGeo), lineMat));
+            leftHinge.add(leftMesh);
+
+            // AÇIKKEN 0 DERECE (DÜMDÜZ)
+            animParts.push({ mesh: leftHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
+            
+            // Zeminden hafif yukarı
+            group.position.y += 0.05;
+
+        } 
+        // --- B) SİLİNDİR VE ÇOKGENLER ---
+        else {
+            const radius = size;
+            const baseGeo = new THREE.CircleGeometry(radius, sides);
+            baseGeo.rotateX(-Math.PI / 2);
+            if (sides === 3 || sides === 4) baseGeo.rotateY(Math.PI / sides);
+            
+            const baseMesh = new THREE.Mesh(baseGeo, mat);
+            if (!isCylinder) baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
+            group.add(baseMesh);
+
+            const angleStep = (Math.PI * 2) / sides;
+            const apothem = radius * Math.cos(Math.PI / sides);
+            const sideLen = 2 * radius * Math.sin(Math.PI / sides);
+
+            for (let i = 0; i < sides; i++) {
+                const angle = i * angleStep;
+                const hinge = new THREE.Group();
+                hinge.position.set(Math.cos(angle) * apothem, 0, Math.sin(angle) * apothem);
+                hinge.rotation.y = -angle - Math.PI / 2;
+                baseMesh.add(hinge);
+
+                const faceGeo = new THREE.PlaneGeometry(sideLen, height);
+                faceGeo.translate(0, height / 2, 0);
+                const face = new THREE.Mesh(faceGeo, mat);
+                
+                if (!isCylinder) face.add(new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMat));
+                hinge.add(face);
+                
+                animParts.push({ mesh: hinge, axis: 'x', closedAngle: 0, openAngle: -Math.PI / 2 });
+
+                if (i === 0) {
+                    const topGroup = new THREE.Group();
+                    topGroup.position.set(0, height, 0);
+                    const topGeo = baseGeo.clone();
+                    topGeo.translate(0, 0, -apothem);
+                    topGeo.rotateX(Math.PI / 2);
+                    
+                    const top = new THREE.Mesh(topGeo, mat);
+                    if (!isCylinder) top.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
+                    topGroup.add(top);
+                    face.add(topGroup);
+                    animParts.push({ mesh: topGroup, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
+                }
+            }
+        }
+
+        group.userData.animParts = animParts;
+        return group;
+    };
+}
+
+// =================================================================
+// EKSİK FONKSİYONLARI TAMAMLAMA VE DÜZELTME YAMASI (EN ALTA EKLE)
+// =================================================================
+
+if (window.Scene3D) {
+    console.log("--- YAMA: Eksik Fonksiyonlar Yükleniyor ---");
+
+    // 1. EKSİK OLAN updateHandlePositions FONKSİYONU
+    // Bu fonksiyon silindiği için kod çöküyordu. Buraya tekrar ekliyoruz.
+    window.Scene3D.updateHandlePositions = function() {
+        // Eğer seçili nesne yoksa veya tutamaç grubu yoksa işlem yapma
+        if (!this.currentMesh || !this.helperGroup) return;
+        
+        // Eğer nesne "Açılabilir" (Unfoldable) ise tutamaçları gizle (Kafa karıştırmasın)
+        if (this.currentMesh.userData.isUnfoldable) {
+            this.helperGroup.visible = false;
+            return;
+        }
+
+        // Normal nesneler için tutamaçları güncelle
+        this.helperGroup.visible = true;
+        const mesh = this.currentMesh;
+        
+        // Kutu sınırlarını hesapla
+        const box = new THREE.Box3().setFromObject(mesh);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+
+        // Tutamaçların konumlarını güncelleme mantığı (Basitleştirilmiş)
+        // Eğer handles dizisi varsa onları kutunun kenarlarına taşı
+        if (this.handles && this.handles.length > 0) {
+            // Basitçe helperGroup'u nesnenin merkezine taşı
+            this.helperGroup.position.copy(center);
+        }
+    };
+
+    // 2. GARANTİLİ ANİMASYON FONKSİYONU (animateUnfold)
+    // Şeklin "Şerit" gibi düz açılmasını garantilemek için bunu da güncelliyoruz.
+    window.Scene3D.animateUnfold = function(group, value) {
+        if (!group || !group.userData.animParts) return;
+
+        // Yüzde hesabı (0.0 ile 1.0 arası)
+        const percent = value / 100;
+
+        group.userData.animParts.forEach(part => {
+            // Eksen kontrolü ve güvenli dönüş
+            const axis = part.axis || 'x';
+            
+            // Eğer openAngle tanımlı değilse 0 kabul et (Tam düzleşmesi için)
+            const openAng = (part.openAngle !== undefined) ? part.openAngle : 0;
+            const closedAng = (part.closedAngle !== undefined) ? part.closedAngle : 0;
+
+            // Mevcut açıyı hesapla
+            const currentAngle = closedAng + (openAng - closedAng) * percent;
+            
+            // Dönüşü uygula
+            if (part.mesh) {
+                part.mesh.rotation[axis] = currentAngle;
+            }
+        });
+    };
+}
+
+
+
+// =================================================================
+// V8 TEŞHİS PAKETİ: NUMARALI YÜZEYLER + ŞERİT AÇINIM
+// (Bunu app.js'nin EN ALTINA yapıştırın)
+// =================================================================
+
+// 1. NUMARA OLUŞTURMA YARDIMCI FONKSİYONU
+window.createNumberSprite = function(number) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    
+    // Arka plan (Okunabilirlik için)
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, 128, 128);
+    
+    // Yazı Ayarları
+    ctx.font = 'bold 80px Arial';
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(number, 64, 64);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(1, 1, 1); // Yazı boyutu (Gerekirse artır: 2, 2, 1)
+    
+    // Yüzeyin çok az önüne koyalım ki içine girmesin
+    sprite.position.z = 0.02; 
+    return sprite;
+};
+
+if (window.Scene3D) {
+    console.log("%c V8 - NUMARALI MOD AKTİF ", "background: orange; color: black; font-size: 20px");
+
+    // --- PRİZMA OLUŞTURUCU (NUMARALI) ---
+    window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
+        const group = new THREE.Group();
+        const mat = new THREE.MeshPhongMaterial({ 
+            color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.8 
+        });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+        const animParts = [];
+
+        // Boyutlar
+        let dimX = size, dimZ = size; 
+        const isCylinder = (sides > 10); 
+        let isPolygon = (!type.startsWith('prism_rect') && !type.startsWith('prism_cube') && type !== 'cube' && !isCylinder);
+
+        if (type === 'prism_rect') { dimX = size * 1.5; dimZ = size; }
+        else if (type === 'prism_cube' || type === 'cube') { dimX = size * 2; dimZ = size * 2; height = size * 2; }
+
+        // 1. KÜP VE DİKDÖRTGEN (NUMARALI ZİNCİR)
+        if (!isPolygon && !isCylinder) {
+            
+            // --- 1. ARKA YÜZ (MERKEZ) ---
+            const backGeo = new THREE.PlaneGeometry(dimX, height);
+            backGeo.rotateX(-Math.PI / 2);
+            const backMesh = new THREE.Mesh(backGeo, mat);
+            backMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(backGeo), lineMat));
+            
+            // NUMARA EKLE: 1
+            const label1 = window.createNumberSprite("1");
+            label1.position.y = 0.02; // Yere yatık olduğu için Y yukarıdır
+            label1.rotation.x = -Math.PI / 2; // Yere paralel olsun
+            backMesh.add(label1);
+            
+            group.add(backMesh); 
+
+            // --- 2. SAĞ YAN (ZİNCİR BAŞI) ---
+            const rightHinge = new THREE.Group(); 
+            rightHinge.position.set(dimX/2, 0, 0); 
+            backMesh.add(rightHinge);
+
+            const rightGeo = new THREE.PlaneGeometry(dimZ, height); 
+            rightGeo.translate(dimZ/2, 0, 0); // Menteşeden sağa uzat
+            const rightMesh = new THREE.Mesh(rightGeo, mat); 
+            rightMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(rightGeo), lineMat));
+            
+            // NUMARA EKLE: 2
+            const label2 = window.createNumberSprite("2");
+            label2.position.set(dimZ/2, 0, 0); // Merkeze al
+            rightMesh.add(label2);
+            
+            rightHinge.add(rightMesh);
+            // Animasyon: Kapalı(-90) -> Açık(0)
+            animParts.push({ mesh: rightHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+            // --- 3. ÖN YÜZ (SAĞA BAĞLI) ---
+            const frontHinge = new THREE.Group(); 
+            frontHinge.position.set(dimZ, 0, 0); // 2'nin ucunda
+            rightMesh.add(frontHinge); // Parent: 2 NUMARA
+
+            const frontGeo = new THREE.PlaneGeometry(dimX, height); 
+            frontGeo.translate(dimX/2, 0, 0); 
+            const frontMesh = new THREE.Mesh(frontGeo, mat); 
+            frontMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(frontGeo), lineMat));
+            
+            // NUMARA EKLE: 3
+            const label3 = window.createNumberSprite("3");
+            label3.position.set(dimX/2, 0, 0);
+            frontMesh.add(label3);
+            
+            frontHinge.add(frontMesh);
+            // Animasyon: Kapalı(-90) -> Açık(0)
+            animParts.push({ mesh: frontHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+            // --- 4. SOL YAN (ÖNE BAĞLI) ---
+            const leftHinge = new THREE.Group(); 
+            leftHinge.position.set(dimX, 0, 0); // 3'ün ucunda
+            frontMesh.add(leftHinge); // Parent: 3 NUMARA
+
+            const leftGeo = new THREE.PlaneGeometry(dimZ, height); 
+            leftGeo.translate(dimZ/2, 0, 0); 
+            const leftMesh = new THREE.Mesh(leftGeo, mat); 
+            leftMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(leftGeo), lineMat));
+            
+            // NUMARA EKLE: 4
+            const label4 = window.createNumberSprite("4");
+            label4.position.set(dimZ/2, 0, 0);
+            leftMesh.add(label4);
+            
+            leftHinge.add(leftMesh);
+            // Animasyon: Kapalı(-90) -> Açık(0)
+            animParts.push({ mesh: leftHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+            // --- 5. ÜST KAPAK (ARKAYA BAĞLI) ---
+            const topHinge = new THREE.Group(); 
+            topHinge.position.set(0, 0, -height/2); 
+            backMesh.add(topHinge);
+
+            const topGeo = new THREE.PlaneGeometry(dimX, dimZ); 
+            topGeo.translate(0, -dimZ/2, 0); 
+            const topMesh = new THREE.Mesh(topGeo, mat); 
+            topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
+            
+            // NUMARA EKLE: 5
+            const label5 = window.createNumberSprite("5");
+            label5.position.set(0, -dimZ/2, 0);
+            topMesh.add(label5);
+
+            topHinge.add(topMesh);
+            animParts.push({ mesh: topHinge, axis: 'x', closedAngle: Math.PI / 2, openAngle: 0 });
+
+            // --- 6. ALT KAPAK (ARKAYA BAĞLI) ---
+            const bottomHinge = new THREE.Group(); 
+            bottomHinge.position.set(0, 0, height/2); 
+            backMesh.add(bottomHinge);
+
+            const bottomGeo = new THREE.PlaneGeometry(dimX, dimZ); 
+            bottomGeo.translate(0, dimZ/2, 0); 
+            const bottomMesh = new THREE.Mesh(bottomGeo, mat); 
+            bottomMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(bottomGeo), lineMat));
+            
+            // NUMARA EKLE: 6
+            const label6 = window.createNumberSprite("6");
+            label6.position.set(0, dimZ/2, 0);
+            bottomMesh.add(label6);
+
+            bottomHinge.add(bottomMesh);
+            animParts.push({ mesh: bottomHinge, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+            group.position.y += 0.05;
+        } 
+        // 2. SİLİNDİR VE ÇOKGEN (Değişiklik Yok)
+        else {
+            const radius = size;
+            const baseGeo = new THREE.CircleGeometry(radius, sides);
+            baseGeo.rotateX(-Math.PI / 2);
+            if (sides === 3 || sides === 4) baseGeo.rotateY(Math.PI / sides);
+            const baseMesh = new THREE.Mesh(baseGeo, mat);
+            if (!isCylinder) baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
+            group.add(baseMesh);
+            const angleStep = (Math.PI * 2) / sides;
+            const apothem = radius * Math.cos(Math.PI / sides);
+            const sideLen = 2 * radius * Math.sin(Math.PI / sides);
+
+            for (let i = 0; i < sides; i++) {
+                const angle = i * angleStep;
+                const hinge = new THREE.Group();
+                hinge.position.set(Math.cos(angle) * apothem, 0, Math.sin(angle) * apothem);
+                hinge.rotation.y = -angle - Math.PI / 2;
+                baseMesh.add(hinge);
+                const faceGeo = new THREE.PlaneGeometry(sideLen, height);
+                faceGeo.translate(0, height / 2, 0);
+                const face = new THREE.Mesh(faceGeo, mat);
+                if (!isCylinder) face.add(new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMat));
+                hinge.add(face);
+                animParts.push({ mesh: hinge, axis: 'x', closedAngle: 0, openAngle: -Math.PI / 2 });
+                if (i === 0) {
+                    const topGroup = new THREE.Group(); topGroup.position.set(0, height, 0);
+                    const topGeo = baseGeo.clone(); topGeo.translate(0, 0, -apothem); topGeo.rotateX(Math.PI / 2);
+                    const top = new THREE.Mesh(topGeo, mat);
+                    if (!isCylinder) top.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
+                    topGroup.add(top); face.add(topGroup);
+                    animParts.push({ mesh: topGroup, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
+                }
+            }
+        }
+        group.userData.animParts = animParts;
+        return group;
+    };
+
+    // --- ANİMASYON FONKSİYONU ---
+    window.Scene3D.animateUnfold = function(group, value) {
+        if (!group || !group.userData.animParts) return;
+        const percent = value / 100;
+        group.userData.animParts.forEach(part => {
+            const axis = part.axis || 'x';
+            const openAng = (part.openAngle !== undefined) ? part.openAngle : 0;
+            const closedAng = (part.closedAngle !== undefined) ? part.closedAngle : 0;
+            const currentAngle = closedAng + (openAng - closedAng) * percent;
+            if (part.mesh) part.mesh.rotation[axis] = currentAngle;
+        });
+    };
+
+    // --- HATA DÜZELTME ---
+    window.Scene3D.updateHandlePositions = function() {
+        if (!this.currentMesh || !this.helperGroup) return;
+        if (this.currentMesh.userData.isUnfoldable) { this.helperGroup.visible = false; return; }
+        this.helperGroup.visible = true;
+        const box = new THREE.Box3().setFromObject(this.currentMesh);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        this.helperGroup.position.copy(center);
+    };
+}
+
+// =================================================================
+// V11 - HASSAS HİZALAMA (KOPMA VE BİNME YOK)
+// =================================================================
+
+window.createNumberSprite = function(number) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, 128, 128);
+    ctx.font = 'bold 80px Arial'; ctx.fillStyle = 'white';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(number, 64, 64);
+    const texture = new THREE.CanvasTexture(canvas);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+    sprite.position.y = 0.05; sprite.scale.set(1.5, 1.5, 1); 
+    return sprite;
+};
+
+if (window.Scene3D) {
+    console.log("%c V11 - HASSAS AYAR AKTİF ", "background: purple; color: white; font-size: 20px");
+
+    window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
+        const group = new THREE.Group();
+        const mat = new THREE.MeshPhongMaterial({ 
+            color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.8 
+        });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+        const animParts = [];
+
+        let dimX = size, dimZ = size; 
+        const isCylinder = (sides > 10); 
+        let isPolygon = (!type.startsWith('prism_rect') && !type.startsWith('prism_cube') && type !== 'cube' && !isCylinder);
+
+        if (type === 'prism_rect') { dimX = size * 1.5; dimZ = size; }
+        else if (type === 'prism_cube' || type === 'cube') { dimX = size * 2; dimZ = size * 2; height = size * 2; }
+
+        if (!isPolygon && !isCylinder) {
+            
+            // 1. ARKA YÜZ (MERKEZ)
+            const backGeo = new THREE.PlaneGeometry(dimX, height);
+            backGeo.rotateX(-Math.PI / 2);
+            const backMesh = new THREE.Mesh(backGeo, mat);
+            backMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(backGeo), lineMat));
+            backMesh.add(window.createNumberSprite("1"));
+            group.add(backMesh); 
+
+            // --- YAN ŞERİTLER (2, 3, 4) ---
+            
+            // 2. SAĞ YAN
+            const rightHinge = new THREE.Group(); 
+            rightHinge.position.set(dimX/2, 0, 0); // 1'in sağ kenarı
+            backMesh.add(rightHinge);
+
+            const rightGeo = new THREE.PlaneGeometry(dimZ, height); 
+            rightGeo.rotateX(-Math.PI / 2); // Yatır
+            const rightMesh = new THREE.Mesh(rightGeo, mat); 
+            rightMesh.position.set(dimZ/2, 0, 0); // Elle ötele
+            rightMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(rightGeo), lineMat));
+            rightMesh.add(window.createNumberSprite("2"));
+            
+            rightHinge.add(rightMesh);
+            animParts.push({ mesh: rightHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 }); // Küp kapanınca dik (-90)
+
+            // 3. ÖN YÜZ
+            const frontHinge = new THREE.Group(); 
+            frontHinge.position.set(dimZ/2, 0, 0); // 2'nin ucunda (Center'dan dimZ/2 kadar uzakta)
+            // DÜZELTME: Mesh position kullanınca hinge'i mesh'in ucuna koymalıyız
+            // RightMesh'in boyu dimZ. Merkezi dimZ/2'de. Ucu dimZ'de.
+            // Hinge, rightMesh'in içine eklenecekse:
+            rightMesh.add(frontHinge); 
+            frontHinge.position.set(dimZ/2, 0, 0); // RightMesh merkezinden ucuna
+
+            const frontGeo = new THREE.PlaneGeometry(dimX, height); 
+            frontGeo.rotateX(-Math.PI / 2); 
+            const frontMesh = new THREE.Mesh(frontGeo, mat); 
+            frontMesh.position.set(dimX/2, 0, 0); 
+            frontMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(frontGeo), lineMat));
+            frontMesh.add(window.createNumberSprite("3"));
+            
+            frontHinge.add(frontMesh);
+            animParts.push({ mesh: frontHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+            // 4. SOL YAN
+            const leftHinge = new THREE.Group(); 
+            frontMesh.add(leftHinge); 
+            leftHinge.position.set(dimX/2, 0, 0); // 3'ün ucu
+
+            const leftGeo = new THREE.PlaneGeometry(dimZ, height); 
+            leftGeo.rotateX(-Math.PI / 2); 
+            const leftMesh = new THREE.Mesh(leftGeo, mat); 
+            leftMesh.position.set(dimZ/2, 0, 0);
+            leftMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(leftGeo), lineMat));
+            leftMesh.add(window.createNumberSprite("4"));
+            
+            leftHinge.add(leftMesh);
+            animParts.push({ mesh: leftHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+
+            // --- ÜST VE ALT (5 ve 6) - KRİTİK DÜZELTME ---
+
+            // 5. ÜST KAPAK
+            const topHinge = new THREE.Group(); 
+            topHinge.position.set(0, 0, -height/2); // Arka kenar
+            backMesh.add(topHinge);
+
+            const topGeo = new THREE.PlaneGeometry(dimX, dimZ); 
+            topGeo.rotateX(-Math.PI / 2); // Yatır
+            const topMesh = new THREE.Mesh(topGeo, mat); 
+            
+            // DÜZELTME: translate kullanmıyoruz. position.z kullanıyoruz.
+            // Menteşe (0,0,0) noktasında. Yüzey arkaya (-Z) gitmeli.
+            // Yüzeyin merkezi, boyunun yarısı kadar gitmeli.
+            topMesh.position.set(0, 0, -dimZ/2); 
+
+            topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
+            topMesh.add(window.createNumberSprite("5"));
+            
+            topHinge.add(topMesh);
+            animParts.push({ mesh: topHinge, axis: 'x', closedAngle: Math.PI / 2, openAngle: 0 });
+
+            // 6. ALT KAPAK
+            const bottomHinge = new THREE.Group(); 
+            bottomHinge.position.set(0, 0, height/2); // Ön kenar
+            backMesh.add(bottomHinge);
+
+            const bottomGeo = new THREE.PlaneGeometry(dimX, dimZ); 
+            bottomGeo.rotateX(-Math.PI / 2); 
+            const bottomMesh = new THREE.Mesh(bottomGeo, mat); 
+            
+            // DÜZELTME: Öne (+Z) gitmeli.
+            bottomMesh.position.set(0, 0, dimZ/2);
+
+            bottomMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(bottomGeo), lineMat));
+            bottomMesh.add(window.createNumberSprite("6"));
+
+            bottomHinge.add(bottomMesh);
+            animParts.push({ mesh: bottomHinge, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+            group.position.y += 0.05;
+        } 
+        else {
+            // SİLİNDİR KISMI (DOKUNULMADI)
+            const radius = size;
+            const baseGeo = new THREE.CircleGeometry(radius, sides);
+            baseGeo.rotateX(-Math.PI / 2);
+            if (sides === 3 || sides === 4) baseGeo.rotateY(Math.PI / sides);
+            const baseMesh = new THREE.Mesh(baseGeo, mat);
+            if (!isCylinder) baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
+            group.add(baseMesh);
+            const angleStep = (Math.PI * 2) / sides;
+            const apothem = radius * Math.cos(Math.PI / sides);
+            const sideLen = 2 * radius * Math.sin(Math.PI / sides);
+            for (let i = 0; i < sides; i++) {
+                const angle = i * angleStep;
+                const hinge = new THREE.Group();
+                hinge.position.set(Math.cos(angle) * apothem, 0, Math.sin(angle) * apothem);
+                hinge.rotation.y = -angle - Math.PI / 2;
+                baseMesh.add(hinge);
+                const faceGeo = new THREE.PlaneGeometry(sideLen, height);
+                faceGeo.translate(0, height / 2, 0);
+                const face = new THREE.Mesh(faceGeo, mat);
+                if (!isCylinder) face.add(new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMat));
+                hinge.add(face);
+                animParts.push({ mesh: hinge, axis: 'x', closedAngle: 0, openAngle: -Math.PI / 2 });
+                if (i === 0) {
+                    const topGroup = new THREE.Group(); topGroup.position.set(0, height, 0);
+                    const topGeo = baseGeo.clone(); topGeo.translate(0, 0, -apothem); topGeo.rotateX(Math.PI / 2);
+                    const top = new THREE.Mesh(topGeo, mat);
+                    if (!isCylinder) top.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
+                    topGroup.add(top); face.add(topGroup);
+                    animParts.push({ mesh: topGroup, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
+                }
+            }
+        }
+        group.userData.animParts = animParts;
+        return group;
+    };
+
+    window.Scene3D.updateHandlePositions = function() {
+        if (!this.currentMesh || !this.helperGroup) return;
+        if (this.currentMesh.userData.isUnfoldable) { this.helperGroup.visible = false; return; }
+        this.helperGroup.visible = true;
+        const box = new THREE.Box3().setFromObject(this.currentMesh);
+        const center = new THREE.Vector3(); box.getCenter(center);
+        this.helperGroup.position.copy(center);
+    };
+    window.Scene3D.animateUnfold = function(group, value) {
+        if (!group || !group.userData.animParts) return;
+        const percent = value / 100;
+        group.userData.animParts.forEach(part => {
+            const axis = part.axis || 'x';
+            const openAng = (part.openAngle !== undefined) ? part.openAngle : 0;
+            const closedAng = (part.closedAngle !== undefined) ? part.closedAngle : 0;
+            const currentAngle = closedAng + (openAng - closedAng) * percent;
+            if (part.mesh) part.mesh.rotation[axis] = currentAngle;
+        });
+    };
 }
