@@ -4412,493 +4412,89 @@ if (typeof window.setActiveTool === 'function') {
 }
 
 // =================================================================
-// ACİL DURUM YAMASI: BU KODU app.js DOSYASININ EN ALTINA YAPIŞTIRIN
+// V23 - FİNAL: KAPAK YÖNLERİ TAM TERSİNE ÇEVRİLDİ (180 DERECE FLIP)
+// (Bunu dosyanın en altına yapıştırın)
 // =================================================================
 
-// Sayfa yüklendiğinde Scene3D'nin içindeki fonksiyonu zorla değiştiriyoruz.
 if (window.Scene3D) {
-    console.log("!!! ZORLA GÜNCELLEME: Prizma Kodu Değiştiriliyor !!!");
+    console.log("%c V23 - YÖNLER TERSİNE DÖNDÜ ", "background: red; color: white; font-size: 20px");
 
-    window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
-        console.log("--- V5 (Override) ŞERİT AÇILIM ÇALIŞTI ---"); 
-
-        const group = new THREE.Group();
-        const mat = new THREE.MeshPhongMaterial({ 
-            color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 
-        });
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-        const animParts = [];
-
-        // 1. BOYUTLARI AYARLA
-        let dimX = size, dimZ = size; 
-        let isPolygon = false;
-        const isCylinder = (sides > 10); 
-
-        if (type === 'prism_rect') {
-            dimX = size * 1.5; // Genişlik
-            dimZ = size;       // Derinlik
-        } else if (type === 'prism_cube' || type === 'cube') {
-            dimX = size * 2; dimZ = size * 2; height = size * 2;
-        } else {
-            isPolygon = true; 
-        }
-
-        // --- A) KÜP VE DİKDÖRTGEN PRİZMA (ZİNCİRLEME ŞERİT) ---
-        if (!isPolygon && !isCylinder) {
-            
-            // 1. MERKEZ PARÇA: ARKA YÜZ (Zeminde Sabit)
-            const backGeo = new THREE.PlaneGeometry(dimX, height);
-            backGeo.rotateX(-Math.PI / 2); // Yere yatır
-            const backMesh = new THREE.Mesh(backGeo, mat);
-            backMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(backGeo), lineMat));
-            group.add(backMesh); 
-
-            // 2. ÜST KAPAK (Arka Yüz'e bağlı)
-            const topHinge = new THREE.Group();
-            topHinge.position.set(0, 0, -height/2); 
-            backMesh.add(topHinge);
-
-            const topGeo = new THREE.PlaneGeometry(dimX, dimZ);
-            topGeo.translate(0, -dimZ/2, 0); 
-            const topMesh = new THREE.Mesh(topGeo, mat);
-            topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-            topHinge.add(topMesh);
-
-            // AÇIKKEN 0 DERECE (DÜMDÜZ)
-            animParts.push({ mesh: topHinge, axis: 'x', closedAngle: Math.PI / 2, openAngle: 0 });
-
-            // 3. ALT KAPAK (Arka Yüz'e bağlı)
-            const bottomHinge = new THREE.Group();
-            bottomHinge.position.set(0, 0, height/2); 
-            backMesh.add(bottomHinge);
-
-            const bottomGeo = new THREE.PlaneGeometry(dimX, dimZ);
-            bottomGeo.translate(0, dimZ/2, 0); 
-            const bottomMesh = new THREE.Mesh(bottomGeo, mat);
-            bottomMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(bottomGeo), lineMat));
-            bottomHinge.add(bottomMesh);
-
-            // AÇIKKEN 0 DERECE (DÜMDÜZ)
-            animParts.push({ mesh: bottomHinge, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
-
-            // --- ZİNCİR BAŞLIYOR (ARKA -> SAĞ -> ÖN -> SOL) ---
-
-            // 4. SAĞ YAN YÜZ (Arka Yüz'e bağlı)
-            const rightHinge = new THREE.Group();
-            rightHinge.position.set(dimX/2, 0, 0); 
-            backMesh.add(rightHinge);
-
-            const rightGeo = new THREE.PlaneGeometry(dimZ, height);
-            rightGeo.translate(dimZ/2, 0, 0); 
-            const rightMesh = new THREE.Mesh(rightGeo, mat);
-            rightMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(rightGeo), lineMat));
-            rightHinge.add(rightMesh);
-
-            // AÇIKKEN 0 DERECE (DÜMDÜZ)
-            animParts.push({ mesh: rightHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
-
-            // 5. ÖN YÜZ (Sağ Yüz'e bağlı) -> Zincirin 2. halkası
-            const frontHinge = new THREE.Group();
-            frontHinge.position.set(dimZ, 0, 0); 
-            rightMesh.add(frontHinge); // Parent: SAĞ YÜZ
-
-            const frontGeo = new THREE.PlaneGeometry(dimX, height);
-            frontGeo.translate(dimX/2, 0, 0); 
-            const frontMesh = new THREE.Mesh(frontGeo, mat);
-            frontMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(frontGeo), lineMat));
-            frontHinge.add(frontMesh);
-
-            // AÇIKKEN 0 DERECE (DÜMDÜZ)
-            animParts.push({ mesh: frontHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
-
-            // 6. SOL YAN YÜZ (Ön Yüz'e bağlı) -> Zincirin 3. halkası
-            const leftHinge = new THREE.Group();
-            leftHinge.position.set(dimX, 0, 0); 
-            frontMesh.add(leftHinge); // Parent: ÖN YÜZ
-
-            const leftGeo = new THREE.PlaneGeometry(dimZ, height);
-            leftGeo.translate(dimZ/2, 0, 0);
-            const leftMesh = new THREE.Mesh(leftGeo, mat);
-            leftMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(leftGeo), lineMat));
-            leftHinge.add(leftMesh);
-
-            // AÇIKKEN 0 DERECE (DÜMDÜZ)
-            animParts.push({ mesh: leftHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
-            
-            // Zeminden hafif yukarı
-            group.position.y += 0.05;
-
-        } 
-        // --- B) SİLİNDİR VE ÇOKGENLER ---
-        else {
-            const radius = size;
-            const baseGeo = new THREE.CircleGeometry(radius, sides);
-            baseGeo.rotateX(-Math.PI / 2);
-            if (sides === 3 || sides === 4) baseGeo.rotateY(Math.PI / sides);
-            
-            const baseMesh = new THREE.Mesh(baseGeo, mat);
-            if (!isCylinder) baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
-            group.add(baseMesh);
-
-            const angleStep = (Math.PI * 2) / sides;
-            const apothem = radius * Math.cos(Math.PI / sides);
-            const sideLen = 2 * radius * Math.sin(Math.PI / sides);
-
-            for (let i = 0; i < sides; i++) {
-                const angle = i * angleStep;
-                const hinge = new THREE.Group();
-                hinge.position.set(Math.cos(angle) * apothem, 0, Math.sin(angle) * apothem);
-                hinge.rotation.y = -angle - Math.PI / 2;
-                baseMesh.add(hinge);
-
-                const faceGeo = new THREE.PlaneGeometry(sideLen, height);
-                faceGeo.translate(0, height / 2, 0);
-                const face = new THREE.Mesh(faceGeo, mat);
-                
-                if (!isCylinder) face.add(new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMat));
-                hinge.add(face);
-                
-                animParts.push({ mesh: hinge, axis: 'x', closedAngle: 0, openAngle: -Math.PI / 2 });
-
-                if (i === 0) {
-                    const topGroup = new THREE.Group();
-                    topGroup.position.set(0, height, 0);
-                    const topGeo = baseGeo.clone();
-                    topGeo.translate(0, 0, -apothem);
-                    topGeo.rotateX(Math.PI / 2);
-                    
-                    const top = new THREE.Mesh(topGeo, mat);
-                    if (!isCylinder) top.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-                    topGroup.add(top);
-                    face.add(topGroup);
-                    animParts.push({ mesh: topGroup, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
-                }
-            }
-        }
-
-        group.userData.animParts = animParts;
-        return group;
+    // 1. EKRAN POZİSYONU
+    window.Scene3D.toScreenPosition = function(obj, vector) {
+        if (!this.camera || !this.renderer) return { x: -100, y: -100 };
+        const widthHalf = 0.5 * this.renderer.getContext().canvas.width;
+        const heightHalf = 0.5 * this.renderer.getContext().canvas.height;
+        const p = vector.clone();
+        p.project(this.camera);
+        return {
+            x: (p.x * widthHalf) + widthHalf,
+            y: -(p.y * heightHalf) + heightHalf
+        };
     };
-}
 
-// =================================================================
-// EKSİK FONKSİYONLARI TAMAMLAMA VE DÜZELTME YAMASI (EN ALTA EKLE)
-// =================================================================
+    // 2. YARDIMCI: NUMARA ETİKETİ
+    window.createNumberSprite = function(number) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128; canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, 128, 128);
+        ctx.font = 'bold 80px Arial'; ctx.fillStyle = 'white';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(number, 64, 64);
+        const texture = new THREE.CanvasTexture(canvas);
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+        sprite.position.y = 0.05; sprite.scale.set(1.5, 1.5, 1); 
+        return sprite;
+    };
 
-if (window.Scene3D) {
-    console.log("--- YAMA: Eksik Fonksiyonlar Yükleniyor ---");
-
-    // 1. EKSİK OLAN updateHandlePositions FONKSİYONU
-    // Bu fonksiyon silindiği için kod çöküyordu. Buraya tekrar ekliyoruz.
-    window.Scene3D.updateHandlePositions = function() {
-        // Eğer seçili nesne yoksa veya tutamaç grubu yoksa işlem yapma
-        if (!this.currentMesh || !this.helperGroup) return;
+    // 3. DÖNÜŞTÜRME FONKSİYONU
+    window.Scene3D.convertToUnfoldable = function(oldMesh) {
+        if (!oldMesh || !oldMesh.userData) return;
         
-        // Eğer nesne "Açılabilir" (Unfoldable) ise tutamaçları gizle (Kafa karıştırmasın)
-        if (this.currentMesh.userData.isUnfoldable) {
-            this.helperGroup.visible = false;
-            return;
+        const type = oldMesh.userData.type;
+        const size = oldMesh.userData.baseSize || 100; 
+        const height = oldMesh.userData.height || (size * 2);
+        const oldPos = oldMesh.position.clone();
+        const oldRot = oldMesh.rotation.clone();
+        const oldScale = oldMesh.scale.x || 1; 
+
+        let sides = 4;
+        if (type === 'prism_3') sides = 3;
+        else if (type === 'prism_4' || type === 'prism_rect' || type === 'prism_cube' || type === 'cube') sides = 4;
+        else if (type === 'prism_5') sides = 5;
+        else if (type === 'prism_6') sides = 6;
+        else if (type === 'prism_cylinder') sides = 32;
+
+        let newGroup = null;
+        if (this.createUnfoldablePrism) {
+            newGroup = this.createUnfoldablePrism(sides, size, height, type);
         }
 
-        // Normal nesneler için tutamaçları güncelle
-        this.helperGroup.visible = true;
-        const mesh = this.currentMesh;
-        
-        // Kutu sınırlarını hesapla
-        const box = new THREE.Box3().setFromObject(mesh);
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        const center = new THREE.Vector3();
-        box.getCenter(center);
+        if (newGroup) {
+            this.scene.remove(oldMesh);
+            if (oldMesh.geometry) oldMesh.geometry.dispose();
 
-        // Tutamaçların konumlarını güncelleme mantığı (Basitleştirilmiş)
-        // Eğer handles dizisi varsa onları kutunun kenarlarına taşı
-        if (this.handles && this.handles.length > 0) {
-            // Basitçe helperGroup'u nesnenin merkezine taşı
-            this.helperGroup.position.copy(center);
+            newGroup.position.copy(oldPos);
+            newGroup.rotation.copy(oldRot);
+            newGroup.scale.set(oldScale, oldScale, oldScale);
+            
+            newGroup.userData = { 
+                type: type, baseSize: size, height: height, 
+                isUnfoldable: true, animParts: newGroup.userData.animParts 
+            };
+            
+            this.scene.add(newGroup);
+            this.currentMesh = newGroup;
+            this.updateHandlePositions();
         }
     };
 
-    // 2. GARANTİLİ ANİMASYON FONKSİYONU (animateUnfold)
-    // Şeklin "Şerit" gibi düz açılmasını garantilemek için bunu da güncelliyoruz.
-    window.Scene3D.animateUnfold = function(group, value) {
-        if (!group || !group.userData.animParts) return;
-
-        // Yüzde hesabı (0.0 ile 1.0 arası)
-        const percent = value / 100;
-
-        group.userData.animParts.forEach(part => {
-            // Eksen kontrolü ve güvenli dönüş
-            const axis = part.axis || 'x';
-            
-            // Eğer openAngle tanımlı değilse 0 kabul et (Tam düzleşmesi için)
-            const openAng = (part.openAngle !== undefined) ? part.openAngle : 0;
-            const closedAng = (part.closedAngle !== undefined) ? part.closedAngle : 0;
-
-            // Mevcut açıyı hesapla
-            const currentAngle = closedAng + (openAng - closedAng) * percent;
-            
-            // Dönüşü uygula
-            if (part.mesh) {
-                part.mesh.rotation[axis] = currentAngle;
-            }
-        });
-    };
-}
-
-
-
-// =================================================================
-// V8 TEŞHİS PAKETİ: NUMARALI YÜZEYLER + ŞERİT AÇINIM
-// (Bunu app.js'nin EN ALTINA yapıştırın)
-// =================================================================
-
-// 1. NUMARA OLUŞTURMA YARDIMCI FONKSİYONU
-window.createNumberSprite = function(number) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128; canvas.height = 128;
-    const ctx = canvas.getContext('2d');
-    
-    // Arka plan (Okunabilirlik için)
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(0, 0, 128, 128);
-    
-    // Yazı Ayarları
-    ctx.font = 'bold 80px Arial';
-    ctx.fillStyle = 'white';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(number, 64, 64);
-    
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-    const sprite = new THREE.Sprite(material);
-    sprite.scale.set(1, 1, 1); // Yazı boyutu (Gerekirse artır: 2, 2, 1)
-    
-    // Yüzeyin çok az önüne koyalım ki içine girmesin
-    sprite.position.z = 0.02; 
-    return sprite;
-};
-
-if (window.Scene3D) {
-    console.log("%c V8 - NUMARALI MOD AKTİF ", "background: orange; color: black; font-size: 20px");
-
-    // --- PRİZMA OLUŞTURUCU (NUMARALI) ---
+    // 4. EVRENSEL PRİZMA OLUŞTURUCU (KAPAKLAR TERS ÇEVRİLDİ)
     window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
         const group = new THREE.Group();
-        const mat = new THREE.MeshPhongMaterial({ 
-            color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.8 
-        });
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-        const animParts = [];
+        group.userData.isUnfoldable = true; 
+        group.userData.type = 'unfoldable_prism';
 
-        // Boyutlar
-        let dimX = size, dimZ = size; 
-        const isCylinder = (sides > 10); 
-        let isPolygon = (!type.startsWith('prism_rect') && !type.startsWith('prism_cube') && type !== 'cube' && !isCylinder);
-
-        if (type === 'prism_rect') { dimX = size * 1.5; dimZ = size; }
-        else if (type === 'prism_cube' || type === 'cube') { dimX = size * 2; dimZ = size * 2; height = size * 2; }
-
-        // 1. KÜP VE DİKDÖRTGEN (NUMARALI ZİNCİR)
-        if (!isPolygon && !isCylinder) {
-            
-            // --- 1. ARKA YÜZ (MERKEZ) ---
-            const backGeo = new THREE.PlaneGeometry(dimX, height);
-            backGeo.rotateX(-Math.PI / 2);
-            const backMesh = new THREE.Mesh(backGeo, mat);
-            backMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(backGeo), lineMat));
-            
-            // NUMARA EKLE: 1
-            const label1 = window.createNumberSprite("1");
-            label1.position.y = 0.02; // Yere yatık olduğu için Y yukarıdır
-            label1.rotation.x = -Math.PI / 2; // Yere paralel olsun
-            backMesh.add(label1);
-            
-            group.add(backMesh); 
-
-            // --- 2. SAĞ YAN (ZİNCİR BAŞI) ---
-            const rightHinge = new THREE.Group(); 
-            rightHinge.position.set(dimX/2, 0, 0); 
-            backMesh.add(rightHinge);
-
-            const rightGeo = new THREE.PlaneGeometry(dimZ, height); 
-            rightGeo.translate(dimZ/2, 0, 0); // Menteşeden sağa uzat
-            const rightMesh = new THREE.Mesh(rightGeo, mat); 
-            rightMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(rightGeo), lineMat));
-            
-            // NUMARA EKLE: 2
-            const label2 = window.createNumberSprite("2");
-            label2.position.set(dimZ/2, 0, 0); // Merkeze al
-            rightMesh.add(label2);
-            
-            rightHinge.add(rightMesh);
-            // Animasyon: Kapalı(-90) -> Açık(0)
-            animParts.push({ mesh: rightHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
-
-            // --- 3. ÖN YÜZ (SAĞA BAĞLI) ---
-            const frontHinge = new THREE.Group(); 
-            frontHinge.position.set(dimZ, 0, 0); // 2'nin ucunda
-            rightMesh.add(frontHinge); // Parent: 2 NUMARA
-
-            const frontGeo = new THREE.PlaneGeometry(dimX, height); 
-            frontGeo.translate(dimX/2, 0, 0); 
-            const frontMesh = new THREE.Mesh(frontGeo, mat); 
-            frontMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(frontGeo), lineMat));
-            
-            // NUMARA EKLE: 3
-            const label3 = window.createNumberSprite("3");
-            label3.position.set(dimX/2, 0, 0);
-            frontMesh.add(label3);
-            
-            frontHinge.add(frontMesh);
-            // Animasyon: Kapalı(-90) -> Açık(0)
-            animParts.push({ mesh: frontHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
-
-            // --- 4. SOL YAN (ÖNE BAĞLI) ---
-            const leftHinge = new THREE.Group(); 
-            leftHinge.position.set(dimX, 0, 0); // 3'ün ucunda
-            frontMesh.add(leftHinge); // Parent: 3 NUMARA
-
-            const leftGeo = new THREE.PlaneGeometry(dimZ, height); 
-            leftGeo.translate(dimZ/2, 0, 0); 
-            const leftMesh = new THREE.Mesh(leftGeo, mat); 
-            leftMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(leftGeo), lineMat));
-            
-            // NUMARA EKLE: 4
-            const label4 = window.createNumberSprite("4");
-            label4.position.set(dimZ/2, 0, 0);
-            leftMesh.add(label4);
-            
-            leftHinge.add(leftMesh);
-            // Animasyon: Kapalı(-90) -> Açık(0)
-            animParts.push({ mesh: leftHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
-
-            // --- 5. ÜST KAPAK (ARKAYA BAĞLI) ---
-            const topHinge = new THREE.Group(); 
-            topHinge.position.set(0, 0, -height/2); 
-            backMesh.add(topHinge);
-
-            const topGeo = new THREE.PlaneGeometry(dimX, dimZ); 
-            topGeo.translate(0, -dimZ/2, 0); 
-            const topMesh = new THREE.Mesh(topGeo, mat); 
-            topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-            
-            // NUMARA EKLE: 5
-            const label5 = window.createNumberSprite("5");
-            label5.position.set(0, -dimZ/2, 0);
-            topMesh.add(label5);
-
-            topHinge.add(topMesh);
-            animParts.push({ mesh: topHinge, axis: 'x', closedAngle: Math.PI / 2, openAngle: 0 });
-
-            // --- 6. ALT KAPAK (ARKAYA BAĞLI) ---
-            const bottomHinge = new THREE.Group(); 
-            bottomHinge.position.set(0, 0, height/2); 
-            backMesh.add(bottomHinge);
-
-            const bottomGeo = new THREE.PlaneGeometry(dimX, dimZ); 
-            bottomGeo.translate(0, dimZ/2, 0); 
-            const bottomMesh = new THREE.Mesh(bottomGeo, mat); 
-            bottomMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(bottomGeo), lineMat));
-            
-            // NUMARA EKLE: 6
-            const label6 = window.createNumberSprite("6");
-            label6.position.set(0, dimZ/2, 0);
-            bottomMesh.add(label6);
-
-            bottomHinge.add(bottomMesh);
-            animParts.push({ mesh: bottomHinge, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
-
-            group.position.y += 0.05;
-        } 
-        // 2. SİLİNDİR VE ÇOKGEN (Değişiklik Yok)
-        else {
-            const radius = size;
-            const baseGeo = new THREE.CircleGeometry(radius, sides);
-            baseGeo.rotateX(-Math.PI / 2);
-            if (sides === 3 || sides === 4) baseGeo.rotateY(Math.PI / sides);
-            const baseMesh = new THREE.Mesh(baseGeo, mat);
-            if (!isCylinder) baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
-            group.add(baseMesh);
-            const angleStep = (Math.PI * 2) / sides;
-            const apothem = radius * Math.cos(Math.PI / sides);
-            const sideLen = 2 * radius * Math.sin(Math.PI / sides);
-
-            for (let i = 0; i < sides; i++) {
-                const angle = i * angleStep;
-                const hinge = new THREE.Group();
-                hinge.position.set(Math.cos(angle) * apothem, 0, Math.sin(angle) * apothem);
-                hinge.rotation.y = -angle - Math.PI / 2;
-                baseMesh.add(hinge);
-                const faceGeo = new THREE.PlaneGeometry(sideLen, height);
-                faceGeo.translate(0, height / 2, 0);
-                const face = new THREE.Mesh(faceGeo, mat);
-                if (!isCylinder) face.add(new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMat));
-                hinge.add(face);
-                animParts.push({ mesh: hinge, axis: 'x', closedAngle: 0, openAngle: -Math.PI / 2 });
-                if (i === 0) {
-                    const topGroup = new THREE.Group(); topGroup.position.set(0, height, 0);
-                    const topGeo = baseGeo.clone(); topGeo.translate(0, 0, -apothem); topGeo.rotateX(Math.PI / 2);
-                    const top = new THREE.Mesh(topGeo, mat);
-                    if (!isCylinder) top.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-                    topGroup.add(top); face.add(topGroup);
-                    animParts.push({ mesh: topGroup, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
-                }
-            }
-        }
-        group.userData.animParts = animParts;
-        return group;
-    };
-
-    // --- ANİMASYON FONKSİYONU ---
-    window.Scene3D.animateUnfold = function(group, value) {
-        if (!group || !group.userData.animParts) return;
-        const percent = value / 100;
-        group.userData.animParts.forEach(part => {
-            const axis = part.axis || 'x';
-            const openAng = (part.openAngle !== undefined) ? part.openAngle : 0;
-            const closedAng = (part.closedAngle !== undefined) ? part.closedAngle : 0;
-            const currentAngle = closedAng + (openAng - closedAng) * percent;
-            if (part.mesh) part.mesh.rotation[axis] = currentAngle;
-        });
-    };
-
-    // --- HATA DÜZELTME ---
-    window.Scene3D.updateHandlePositions = function() {
-        if (!this.currentMesh || !this.helperGroup) return;
-        if (this.currentMesh.userData.isUnfoldable) { this.helperGroup.visible = false; return; }
-        this.helperGroup.visible = true;
-        const box = new THREE.Box3().setFromObject(this.currentMesh);
-        const center = new THREE.Vector3();
-        box.getCenter(center);
-        this.helperGroup.position.copy(center);
-    };
-}
-
-// =================================================================
-// V11 - HASSAS HİZALAMA (KOPMA VE BİNME YOK)
-// =================================================================
-
-window.createNumberSprite = function(number) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128; canvas.height = 128;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, 128, 128);
-    ctx.font = 'bold 80px Arial'; ctx.fillStyle = 'white';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(number, 64, 64);
-    const texture = new THREE.CanvasTexture(canvas);
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
-    sprite.position.y = 0.05; sprite.scale.set(1.5, 1.5, 1); 
-    return sprite;
-};
-
-if (window.Scene3D) {
-    console.log("%c V11 - HASSAS AYAR AKTİF ", "background: purple; color: white; font-size: 20px");
-
-    window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
-        const group = new THREE.Group();
         const mat = new THREE.MeshPhongMaterial({ 
             color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.8 
         });
@@ -4912,156 +4508,231 @@ if (window.Scene3D) {
         if (type === 'prism_rect') { dimX = size * 1.5; dimZ = size; }
         else if (type === 'prism_cube' || type === 'cube') { dimX = size * 2; dimZ = size * 2; height = size * 2; }
 
+        // --- A) KÜP VE DİKDÖRTGEN ---
         if (!isPolygon && !isCylinder) {
-            
-            // 1. ARKA YÜZ (MERKEZ)
-            const backGeo = new THREE.PlaneGeometry(dimX, height);
-            backGeo.rotateX(-Math.PI / 2);
+            // ARKA (1)
+            const backGeo = new THREE.PlaneGeometry(dimX, height); backGeo.rotateX(-Math.PI / 2);
             const backMesh = new THREE.Mesh(backGeo, mat);
             backMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(backGeo), lineMat));
             backMesh.add(window.createNumberSprite("1"));
             group.add(backMesh); 
 
-            // --- YAN ŞERİTLER (2, 3, 4) ---
-            
-            // 2. SAĞ YAN
-            const rightHinge = new THREE.Group(); 
-            rightHinge.position.set(dimX/2, 0, 0); // 1'in sağ kenarı
-            backMesh.add(rightHinge);
-
-            const rightGeo = new THREE.PlaneGeometry(dimZ, height); 
-            rightGeo.rotateX(-Math.PI / 2); // Yatır
-            const rightMesh = new THREE.Mesh(rightGeo, mat); 
-            rightMesh.position.set(dimZ/2, 0, 0); // Elle ötele
+            // SAĞ (2)
+            const rightHinge = new THREE.Group(); rightHinge.position.set(dimX/2, 0, 0); backMesh.add(rightHinge);
+            const rightGeo = new THREE.PlaneGeometry(dimZ, height); rightGeo.rotateX(-Math.PI / 2); 
+            const rightMesh = new THREE.Mesh(rightGeo, mat); rightMesh.position.set(dimZ/2, 0, 0); 
             rightMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(rightGeo), lineMat));
             rightMesh.add(window.createNumberSprite("2"));
-            
             rightHinge.add(rightMesh);
-            animParts.push({ mesh: rightHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 }); // Küp kapanınca dik (-90)
+            animParts.push({ mesh: rightHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
 
-            // 3. ÖN YÜZ
-            const frontHinge = new THREE.Group(); 
-            frontHinge.position.set(dimZ/2, 0, 0); // 2'nin ucunda (Center'dan dimZ/2 kadar uzakta)
-            // DÜZELTME: Mesh position kullanınca hinge'i mesh'in ucuna koymalıyız
-            // RightMesh'in boyu dimZ. Merkezi dimZ/2'de. Ucu dimZ'de.
-            // Hinge, rightMesh'in içine eklenecekse:
-            rightMesh.add(frontHinge); 
-            frontHinge.position.set(dimZ/2, 0, 0); // RightMesh merkezinden ucuna
-
-            const frontGeo = new THREE.PlaneGeometry(dimX, height); 
-            frontGeo.rotateX(-Math.PI / 2); 
-            const frontMesh = new THREE.Mesh(frontGeo, mat); 
-            frontMesh.position.set(dimX/2, 0, 0); 
+            // ÖN (3)
+            const frontHinge = new THREE.Group(); rightMesh.add(frontHinge); frontHinge.position.set(dimZ/2, 0, 0); 
+            const frontGeo = new THREE.PlaneGeometry(dimX, height); frontGeo.rotateX(-Math.PI / 2); 
+            const frontMesh = new THREE.Mesh(frontGeo, mat); frontMesh.position.set(dimX/2, 0, 0); 
             frontMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(frontGeo), lineMat));
             frontMesh.add(window.createNumberSprite("3"));
-            
             frontHinge.add(frontMesh);
             animParts.push({ mesh: frontHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
 
-            // 4. SOL YAN
-            const leftHinge = new THREE.Group(); 
-            frontMesh.add(leftHinge); 
-            leftHinge.position.set(dimX/2, 0, 0); // 3'ün ucu
-
-            const leftGeo = new THREE.PlaneGeometry(dimZ, height); 
-            leftGeo.rotateX(-Math.PI / 2); 
-            const leftMesh = new THREE.Mesh(leftGeo, mat); 
-            leftMesh.position.set(dimZ/2, 0, 0);
+            // SOL (4)
+            const leftHinge = new THREE.Group(); frontMesh.add(leftHinge); leftHinge.position.set(dimX/2, 0, 0); 
+            const leftGeo = new THREE.PlaneGeometry(dimZ, height); leftGeo.rotateX(-Math.PI / 2); 
+            const leftMesh = new THREE.Mesh(leftGeo, mat); leftMesh.position.set(dimZ/2, 0, 0);
             leftMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(leftGeo), lineMat));
             leftMesh.add(window.createNumberSprite("4"));
-            
             leftHinge.add(leftMesh);
             animParts.push({ mesh: leftHinge, axis: 'z', closedAngle: -Math.PI / 2, openAngle: 0 });
 
-
-            // --- ÜST VE ALT (5 ve 6) - KRİTİK DÜZELTME ---
-
-            // 5. ÜST KAPAK
-            const topHinge = new THREE.Group(); 
-            topHinge.position.set(0, 0, -height/2); // Arka kenar
-            backMesh.add(topHinge);
-
-            const topGeo = new THREE.PlaneGeometry(dimX, dimZ); 
-            topGeo.rotateX(-Math.PI / 2); // Yatır
-            const topMesh = new THREE.Mesh(topGeo, mat); 
-            
-            // DÜZELTME: translate kullanmıyoruz. position.z kullanıyoruz.
-            // Menteşe (0,0,0) noktasında. Yüzey arkaya (-Z) gitmeli.
-            // Yüzeyin merkezi, boyunun yarısı kadar gitmeli.
-            topMesh.position.set(0, 0, -dimZ/2); 
-
+            // KAPAKLAR
+            const topHinge = new THREE.Group(); topHinge.position.set(0, 0, -height/2); backMesh.add(topHinge);
+            const topGeo = new THREE.PlaneGeometry(dimX, dimZ); topGeo.rotateX(-Math.PI / 2); 
+            const topMesh = new THREE.Mesh(topGeo, mat); topMesh.position.set(0, 0, -dimZ/2); 
             topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-            topMesh.add(window.createNumberSprite("5"));
-            
+            topMesh.add(window.createNumberSprite("Alt"));
             topHinge.add(topMesh);
-            animParts.push({ mesh: topHinge, axis: 'x', closedAngle: Math.PI / 2, openAngle: 0 });
+            animParts.push({ mesh: topHinge, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
 
-            // 6. ALT KAPAK
-            const bottomHinge = new THREE.Group(); 
-            bottomHinge.position.set(0, 0, height/2); // Ön kenar
-            backMesh.add(bottomHinge);
-
-            const bottomGeo = new THREE.PlaneGeometry(dimX, dimZ); 
-            bottomGeo.rotateX(-Math.PI / 2); 
-            const bottomMesh = new THREE.Mesh(bottomGeo, mat); 
-            
-            // DÜZELTME: Öne (+Z) gitmeli.
-            bottomMesh.position.set(0, 0, dimZ/2);
-
+            const bottomHinge = new THREE.Group(); bottomHinge.position.set(0, 0, height/2); backMesh.add(bottomHinge);
+            const bottomGeo = new THREE.PlaneGeometry(dimX, dimZ); bottomGeo.rotateX(-Math.PI / 2); 
+            const bottomMesh = new THREE.Mesh(bottomGeo, mat); bottomMesh.position.set(0, 0, dimZ/2);
             bottomMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(bottomGeo), lineMat));
-            bottomMesh.add(window.createNumberSprite("6"));
-
+            bottomMesh.add(window.createNumberSprite("Üst"));
             bottomHinge.add(bottomMesh);
-            animParts.push({ mesh: bottomHinge, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
+            animParts.push({ mesh: bottomHinge, axis: 'x', closedAngle: Math.PI / 2, openAngle: 0 });
 
             group.position.y += 0.05;
         } 
+        // --- B) DÜZGÜN ÇOKGENLER VE SİLİNDİR ---
         else {
-            // SİLİNDİR KISMI (DOKUNULMADI)
             const radius = size;
-            const baseGeo = new THREE.CircleGeometry(radius, sides);
-            baseGeo.rotateX(-Math.PI / 2);
-            if (sides === 3 || sides === 4) baseGeo.rotateY(Math.PI / sides);
-            const baseMesh = new THREE.Mesh(baseGeo, mat);
-            if (!isCylinder) baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
-            group.add(baseMesh);
-            const angleStep = (Math.PI * 2) / sides;
+            const s = 2 * radius * Math.sin(Math.PI / sides);
             const apothem = radius * Math.cos(Math.PI / sides);
-            const sideLen = 2 * radius * Math.sin(Math.PI / sides);
-            for (let i = 0; i < sides; i++) {
-                const angle = i * angleStep;
-                const hinge = new THREE.Group();
-                hinge.position.set(Math.cos(angle) * apothem, 0, Math.sin(angle) * apothem);
-                hinge.rotation.y = -angle - Math.PI / 2;
-                baseMesh.add(hinge);
-                const faceGeo = new THREE.PlaneGeometry(sideLen, height);
-                faceGeo.translate(0, height / 2, 0);
-                const face = new THREE.Mesh(faceGeo, mat);
-                if (!isCylinder) face.add(new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMat));
-                hinge.add(face);
-                animParts.push({ mesh: hinge, axis: 'x', closedAngle: 0, openAngle: -Math.PI / 2 });
-                if (i === 0) {
-                    const topGroup = new THREE.Group(); topGroup.position.set(0, height, 0);
-                    const topGeo = baseGeo.clone(); topGeo.translate(0, 0, -apothem); topGeo.rotateX(Math.PI / 2);
-                    const top = new THREE.Mesh(topGeo, mat);
-                    if (!isCylinder) top.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-                    topGroup.add(top); face.add(topGroup);
-                    animParts.push({ mesh: topGroup, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
-                }
+            let sideLens = [];
+            for(let k=0; k<sides; k++) sideLens.push(s);
+
+            const topGeo = new THREE.CircleGeometry(radius, sides);
+            const bottomGeo = new THREE.CircleGeometry(radius, sides);
+            
+            // --- HİZALAMA VE "TAM TERSİ" DÜZELTMESİ (V23) ---
+            if (sides === 3) { 
+                topGeo.rotateZ(-Math.PI / 2); 
+                bottomGeo.rotateZ(-Math.PI / 2);
+                
+                // V23: HEM ÜST HEM ALT KAPAĞA 180 DERECE EKLE (TAM TERSİ OLSUN)
+                topGeo.rotateZ(Math.PI);    // Üstü çevir
+                // bottomGeo.rotateZ(Math.PI); // Alttaki çevirmeyi İPTAL etmiyoruz, V22'de vardı, şimdi tam tersi için durum ne gerektiriyorsa.
+                // V22: Alt zaten 180 dönmüştü. Kullanıcı "Şimdi ikisi de ters" dedi.
+                // Demek ki V22'nin tam zıttı lazım.
+                // V22 Üst: 0 derece ek. -> V23 Üst: 180 ekle.
+                // V22 Alt: 180 derece ek. -> V23 Alt: 0 ekle (yani 180'i kaldır).
+                
+                // DÜZELTİLMİŞ MANTIK:
+                // Üst Kapak: 180 çevir.
+                // Alt Kapak: Çevirme yapma (V22'de yapmıştık, siliyoruz).
+            } 
+            else if (sides === 4) { 
+                topGeo.rotateZ(Math.PI / 4); 
+                bottomGeo.rotateZ(Math.PI / 4); 
+            } 
+            else if (sides === 5) {
+                // Beşgen
+                const ang = Math.PI / 2 + Math.PI / sides;
+                topGeo.rotateZ(ang);
+                bottomGeo.rotateZ(ang);
+                
+                // V23 DÜZELTME:
+                // Üst Kapak: 180 çevir.
+                // Alt Kapak: Çevirme yapma.
+                topGeo.rotateZ(Math.PI);
             }
+            else { 
+                topGeo.rotateZ(Math.PI / 2 + Math.PI / sides); 
+                bottomGeo.rotateZ(Math.PI / 2 + Math.PI / sides); 
+            }
+
+            const topOffset = -apothem;
+            const bottomOffset = apothem;
+            const turnAngle = (Math.PI * 2) / sides;
+
+            let previousMesh = null;
+            let previousWidth = 0;
+            let faces = []; 
+
+            for (let i = 0; i < sides; i++) {
+                const currentWidth = sideLens[i];
+                const geo = new THREE.PlaneGeometry(currentWidth, height);
+                geo.rotateX(-Math.PI / 2); 
+                
+                const mesh = new THREE.Mesh(geo, mat);
+                if (!isCylinder) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), lineMat));
+                if(window.createNumberSprite && !isCylinder) {
+                    mesh.add(window.createNumberSprite((i + 1).toString())); 
+                }
+
+                if (i === 0) {
+                    group.add(mesh);
+                    previousMesh = mesh;
+                } else {
+                    const hinge = new THREE.Group();
+                    hinge.position.set(previousWidth / 2, 0, 0);
+                    previousMesh.add(hinge);
+
+                    mesh.position.set(currentWidth / 2, 0, 0);
+                    hinge.add(mesh);
+
+                    animParts.push({ 
+                        mesh: hinge, 
+                        axis: 'z', 
+                        closedAngle: -turnAngle, 
+                        openAngle: 0 
+                    });
+
+                    previousMesh = mesh;
+                }
+                faces.push(mesh); 
+                previousWidth = currentWidth;
+            }
+
+            // KAPAKLARI YERLEŞTİRME
+            let attachmentFace = faces[0]; 
+            if (isCylinder) {
+                const midIndex = Math.floor(sides / 2);
+                attachmentFace = faces[midIndex];
+            }
+
+            // 1. KAPAK (Alt Etiketi)
+            const topHinge = new THREE.Group();
+            topHinge.position.set(0, 0, -height / 2); 
+            attachmentFace.add(topHinge);
+
+            topGeo.rotateX(-Math.PI / 2); 
+            const topMesh = new THREE.Mesh(topGeo, mat);
+            topMesh.position.set(0, 0, topOffset); 
+            
+            if(!isCylinder) topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
+            if(window.createNumberSprite && !isCylinder) topMesh.add(window.createNumberSprite("Alt"));
+            
+            topHinge.add(topMesh);
+            animParts.push({ mesh: topHinge, axis: 'x', closedAngle: -Math.PI / 2, openAngle: 0 });
+
+            // 2. KAPAK (Üst Etiketi)
+            const bottomHinge = new THREE.Group();
+            bottomHinge.position.set(0, 0, height / 2); 
+            attachmentFace.add(bottomHinge);
+
+            bottomGeo.rotateX(-Math.PI / 2);
+            const bottomMesh = new THREE.Mesh(bottomGeo, mat);
+            bottomMesh.position.set(0, 0, bottomOffset);
+
+            if(!isCylinder) bottomMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(bottomGeo), lineMat));
+            if(window.createNumberSprite && !isCylinder) bottomMesh.add(window.createNumberSprite("Üst"));
+            
+            bottomHinge.add(bottomMesh);
+            animParts.push({ mesh: bottomHinge, axis: 'x', closedAngle: Math.PI / 2, openAngle: 0 });
+
+            group.position.y += 0.05;
         }
+        
         group.userData.animParts = animParts;
         return group;
     };
 
+    // 5. TUTAMAÇLARI GÜNCELLE
     window.Scene3D.updateHandlePositions = function() {
-        if (!this.currentMesh || !this.helperGroup) return;
-        if (this.currentMesh.userData.isUnfoldable) { this.helperGroup.visible = false; return; }
-        this.helperGroup.visible = true;
+        if (!this.currentMesh || window.currentTool !== 'move') {
+            if (this.rotateHandleBtn) this.rotateHandleBtn.style.display = 'none';
+            if (this.resizeHandleBtn) this.resizeHandleBtn.style.display = 'none';
+            if (this.helperGroup) this.helperGroup.visible = false;
+            return;
+        }
+
+        this.helperGroup.visible = true; 
         const box = new THREE.Box3().setFromObject(this.currentMesh);
         const center = new THREE.Vector3(); box.getCenter(center);
         this.helperGroup.position.copy(center);
+
+        const topPoint = new THREE.Vector3(box.max.x, center.y, box.min.z); 
+        const screenPosRotate = this.toScreenPosition(this.currentMesh, topPoint);
+        if (this.rotateHandleBtn) {
+            this.rotateHandleBtn.style.display = 'block';
+            this.rotateHandleBtn.style.left = (screenPosRotate.x + 20) + 'px';
+            this.rotateHandleBtn.style.top = (screenPosRotate.y - 20) + 'px';
+        }
+
+        const bottomPoint = new THREE.Vector3(box.max.x, center.y, box.max.z);
+        const screenPosResize = this.toScreenPosition(this.currentMesh, bottomPoint);
+        if (this.resizeHandleBtn) {
+            this.resizeHandleBtn.style.display = 'block';
+            this.resizeHandleBtn.style.left = (screenPosResize.x + 20) + 'px';
+            this.resizeHandleBtn.style.top = (screenPosResize.y + 20) + 'px';
+        }
+        
+        const screenCenter = this.toScreenPosition(this.currentMesh, center);
+        this.handles = { center: screenCenter };
     };
+
+    // 6. ANİMASYON FONKSİYONU
     window.Scene3D.animateUnfold = function(group, value) {
         if (!group || !group.userData.animParts) return;
         const percent = value / 100;
@@ -5072,5 +4743,70 @@ if (window.Scene3D) {
             const currentAngle = closedAng + (openAng - closedAng) * percent;
             if (part.mesh) part.mesh.rotation[axis] = currentAngle;
         });
+        if (this.currentMesh === group) {
+            this.updateHandlePositions();
+        }
+    };
+
+    // 7. SEÇİM VE ÇİZİM MANTIĞI
+    window.Scene3D.onDown = function(x, y) {
+        if (!this.isInit) return false;
+        if (this.isRotatingHandle || this.isResizingHandle) return true;
+
+        const coords = this.getNormalizedCoords(x, y);
+        this.raycaster.setFromCamera(coords, this.camera);
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+        const validHits = intersects.filter(hit => {
+            if (!hit.object.visible) return false;
+            if (hit.object.type === 'GridHelper' || hit.object.type === 'AxesHelper') return false;
+            if (hit.object === this.plane) return false;
+            return true;
+        });
+
+        if (validHits.length > 0) {
+            let targetObj = validHits[0].object;
+            while(targetObj.parent && targetObj.parent.type !== 'Scene') {
+                if (targetObj.userData && targetObj.userData.isUnfoldable) { break; }
+                targetObj = targetObj.parent;
+            }
+            if (!targetObj.userData.isUnfoldable && targetObj.parent && targetObj.parent.userData.isUnfoldable) {
+                targetObj = targetObj.parent;
+            }
+            this.currentMesh = targetObj;
+            if (window.currentTool === 'move') {
+                this.isRotatingShape = false; this.isDragging = true; this.isClickCandidate = true;
+                this.clickStartPos = { x, y };
+                this.dragPlane.setFromNormalAndCoplanarPoint(this.camera.getWorldDirection(new THREE.Vector3()), this.currentMesh.position);
+                const intersectPoint = new THREE.Vector3();
+                if(this.raycaster.ray.intersectPlane(this.dragPlane, intersectPoint)) { this.dragOffset.subVectors(this.currentMesh.position, intersectPoint); }
+            } else {
+                this.isDragging = false; this.isClickCandidate = false; this.isRotatingShape = true; this.lastMousePos = { x, y };
+            }
+            this.updateHandlePositions();
+            return true;
+        }
+
+        if (this.activeTool && this.activeTool !== 'none' && this.activeTool !== 'move') {
+            this.isDrawing = true;
+            this.startPoint = this.get3DPointOnFloor(x, y);
+            const geometry = new THREE.BufferGeometry().setFromPoints([this.startPoint, this.startPoint]);
+            const material = new THREE.LineBasicMaterial({ color: 0x00ffcc });
+            this.previewLine = new THREE.Line(geometry, material);
+            this.scene.add(this.previewLine);
+            const previewGeo = this.createGeometry(this.activeTool, 0.1);
+            if(this.activeTool.startsWith('prism') || this.activeTool.startsWith('pyramid')) { previewGeo.rotateX(Math.PI / 2); }
+            const previewMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true, transparent: true, opacity: 0.5 });
+            this.previewMesh = new THREE.Mesh(previewGeo, previewMat);
+            this.previewMesh.position.copy(this.startPoint);
+            this.scene.add(this.previewMesh);
+            return true;
+        }
+
+        if (window.currentTool === 'move') {
+            this.currentMesh = null;
+            this.updateHandlePositions();
+        }
+        return false;
     };
 }
