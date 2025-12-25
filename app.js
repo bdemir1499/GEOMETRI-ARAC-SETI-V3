@@ -4810,3 +4810,180 @@ if (window.Scene3D) {
         return false;
     };
 }
+
+// =================================================================
+// V56 - FİNAL: 2 VE 4 NUMARALI YÜZEYLER Y EKSENİNE ALINDI
+// (Pervane etkisi olmaması için geometri içeride çevrildi)
+// =================================================================
+
+// 1. MEVCUT V23 PRİZMA SİSTEMİNİ YEDEKLE
+const existingV23PrismMethod = window.Scene3D.createUnfoldablePrism;
+
+// --- YARDIMCI: MİKRO ETİKET OLUŞTURUCU ---
+const createMicroLabelV56 = function(text) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.font = 'bold 90px Arial'; 
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 8; ctx.strokeStyle = 'black'; ctx.strokeText(text, 64, 64);
+    ctx.fillStyle = 'white'; ctx.fillText(text, 64, 64);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter; 
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(1.5, 1.5, 1); 
+    return sprite;
+};
+
+// 2. YENİ PİRAMİT FONKSİYONU
+window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
+    
+    // Prizma ise eski koda dön
+    const isPyramid = (type.startsWith('pyramid') || type === 'cone');
+    if (!isPyramid) {
+        return existingV23PrismMethod.call(this, sides, size, height, type);
+    }
+
+    console.log("V56 - 2 ve 4 Y Ekseni Modu: " + type);
+
+    const group = new THREE.Group();
+    group.userData.isUnfoldable = true; 
+    group.userData.type = 'unfoldable_prism'; 
+
+    const mat = new THREE.MeshPhongMaterial({ 
+        color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.8 
+    });
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+    const animParts = [];
+    
+    const isSquare = (sides === 4);
+    const isCylinder = (sides > 10);
+    const radius = size;
+    const sideCount = sides;
+    
+    const s = isSquare ? (radius * 1.5) : (2 * radius * Math.sin(Math.PI / sideCount)); 
+    const apothem = isSquare ? (s / 2) : (radius * Math.cos(Math.PI / sideCount));
+    const slantHeight = Math.sqrt(height * height + apothem * apothem); 
+    
+    // Kapanma Açısı
+    const elevationAngle = Math.atan2(height, apothem) + 0.05; 
+
+    // A) TABAN
+    let baseGeo;
+    if (isSquare) {
+        baseGeo = new THREE.PlaneGeometry(s, s);
+        baseGeo.rotateX(-Math.PI / 2); 
+    } else {
+        baseGeo = new THREE.CircleGeometry(radius, sideCount);
+        let rotOff = (sideCount === 3) ? -Math.PI/2 : (Math.PI/2 + Math.PI/sideCount);
+        baseGeo.rotateZ(rotOff);
+        baseGeo.rotateX(-Math.PI / 2);
+    }
+
+    const baseMesh = new THREE.Mesh(baseGeo, mat);
+    if(!isCylinder) baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
+    
+    if(!isCylinder) {
+        const baseLabel = createMicroLabelV56("1");
+        baseLabel.position.y = 0.1;
+        baseMesh.add(baseLabel);
+    }
+    group.add(baseMesh);
+
+    // B) YAN YÜZLER
+    for (let i = 0; i < sideCount; i++) {
+        const hinge = new THREE.Group();
+        
+        let finalClosedAngle = -elevationAngle; 
+        let rotationAxis = 'x'; // Varsayılan Eksen
+
+        // ÜÇGEN GEOMETRİSİ (Varsayılan)
+        // Tabanı X eksenindedir.
+        const triShape = new THREE.Shape();
+        triShape.moveTo(-s / 2, 0);
+        triShape.lineTo(s / 2, 0);
+        triShape.lineTo(0, slantHeight); 
+        triShape.lineTo(-s / 2, 0);
+        const triGeo = new THREE.ShapeGeometry(triShape);
+        triGeo.rotateX(-Math.PI / 2); // Varsayılan yatırma
+        
+        const face = new THREE.Mesh(triGeo, mat);
+
+        if (isSquare) {
+            // i=0: Sağ(2) | i=1: Arka(3) | i=2: Sol(4) | i=3: Ön(5)
+
+            if (i === 0) { 
+                // --- 2 NUMARA (SAĞ) - Y EKSENİ ---
+                hinge.position.set(s/2, 0, 0);
+                
+                // Menteşenin Y eksenini, Tabanın Z ekseni (Kenar) ile hizalıyoruz.
+                hinge.rotation.x = -Math.PI / 2; 
+                
+                // Üçgenin tabanını Menteşenin Y eksenine hizalamak için çeviriyoruz.
+                face.rotation.z = Math.PI / 2; 
+
+                rotationAxis = 'y'; // ARTIK Y EKSENİNDE DÖNECEK
+                finalClosedAngle = elevationAngle; // Yön (Sağ el kuralı gereği pozitif)
+            } 
+            else if (i === 1) { 
+                // 3 NUMARA (ARKA) - X EKSENİ (TERS/DIŞA AÇILIR)
+                hinge.position.set(0, 0, -s/2);      
+                hinge.rotation.y = Math.PI;          
+                rotationAxis = 'x';
+                finalClosedAngle = elevationAngle; // POZİTİF (Dışa açılma)
+            } 
+            else if (i === 2) { 
+                // --- 4 NUMARA (SOL) - Y EKSENİ ---
+                hinge.position.set(-s/2, 0, 0);      
+                
+                // Menteşenin Y eksenini hizala
+                hinge.rotation.x = -Math.PI / 2; 
+                
+                // Üçgeni hizala
+                face.rotation.z = Math.PI / 2; 
+
+                rotationAxis = 'y'; // ARTIK Y EKSENİNDE DÖNECEK
+                finalClosedAngle = -elevationAngle; // Yön (Negatif)
+            } 
+            else if (i === 3) { 
+                // 5 NUMARA (ÖN) - X EKSENİ (TERS/DIŞA AÇILIR)
+                hinge.position.set(0, 0, s/2);       
+                hinge.rotation.y = 0; 
+                rotationAxis = 'x';
+                finalClosedAngle = -elevationAngle; // NEGATİF (Dışa açılma)
+            }
+        } else {
+            // Diğer şekiller (Üçgen vb) - Standart X ekseni
+            const angleStep = (Math.PI * 2) / sideCount;
+            let rotOffset = (sideCount === 3) ? -Math.PI/2 : (Math.PI/2 + Math.PI/sideCount);
+            const midEdgeAngle = (i * angleStep) + (angleStep / 2) + rotOffset;
+            hinge.position.set(Math.cos(midEdgeAngle) * apothem, 0, Math.sin(midEdgeAngle) * apothem);
+            hinge.rotation.y = -midEdgeAngle - Math.PI / 2;
+        }
+
+        baseMesh.add(hinge);
+
+        if(!isCylinder) face.add(new THREE.LineSegments(new THREE.EdgesGeometry(triGeo), lineMat)); // triGeo yerine face.geometry kullanmıyoruz çünkü klonlanmadı
+        
+        if(!isCylinder) {
+            const label = createMicroLabelV56((i + 2).toString());
+            label.position.set(0, 0.1, -slantHeight / 2); 
+            face.add(label);
+        }
+        
+        hinge.add(face);
+
+        // ANİMASYON
+        animParts.push({ 
+            mesh: hinge, 
+            axis: rotationAxis, // Dinamik eksen (X veya Y)
+            closedAngle: finalClosedAngle, 
+            openAngle: 0 
+        });
+    }
+
+    group.position.y += 0.05; 
+    group.userData.animParts = animParts;
+    return group;
+};
