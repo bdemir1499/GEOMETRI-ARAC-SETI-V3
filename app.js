@@ -4812,15 +4812,15 @@ if (window.Scene3D) {
 }
 
 // =================================================================
-// V56 - FİNAL: 2 VE 4 NUMARALI YÜZEYLER Y EKSENİNE ALINDI
-// (Pervane etkisi olmaması için geometri içeride çevrildi)
+// V57 - FİNAL: 2 VE 4 NUMARA BAŞLANGIÇ KONUMU DÜZELTİLDİ
+// (Yerde başlamayacaklar, tepeden başlayıp açılacaklar)
 // =================================================================
 
 // 1. MEVCUT V23 PRİZMA SİSTEMİNİ YEDEKLE
 const existingV23PrismMethod = window.Scene3D.createUnfoldablePrism;
 
 // --- YARDIMCI: MİKRO ETİKET OLUŞTURUCU ---
-const createMicroLabelV56 = function(text) {
+const createMicroLabelV57 = function(text) {
     const canvas = document.createElement('canvas');
     canvas.width = 128; canvas.height = 128;
     const ctx = canvas.getContext('2d');
@@ -4845,7 +4845,7 @@ window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
         return existingV23PrismMethod.call(this, sides, size, height, type);
     }
 
-    console.log("V56 - 2 ve 4 Y Ekseni Modu: " + type);
+    console.log("V57 - 2 ve 4 Tepe Başlangıç Modu: " + type);
 
     const group = new THREE.Group();
     group.userData.isUnfoldable = true; 
@@ -4885,7 +4885,7 @@ window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
     if(!isCylinder) baseMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMat));
     
     if(!isCylinder) {
-        const baseLabel = createMicroLabelV56("1");
+        const baseLabel = createMicroLabelV57("1");
         baseLabel.position.y = 0.1;
         baseMesh.add(baseLabel);
     }
@@ -4896,17 +4896,16 @@ window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
         const hinge = new THREE.Group();
         
         let finalClosedAngle = -elevationAngle; 
-        let rotationAxis = 'x'; // Varsayılan Eksen
+        let rotationAxis = 'x'; 
 
         // ÜÇGEN GEOMETRİSİ (Varsayılan)
-        // Tabanı X eksenindedir.
         const triShape = new THREE.Shape();
         triShape.moveTo(-s / 2, 0);
         triShape.lineTo(s / 2, 0);
         triShape.lineTo(0, slantHeight); 
         triShape.lineTo(-s / 2, 0);
         const triGeo = new THREE.ShapeGeometry(triShape);
-        triGeo.rotateX(-Math.PI / 2); // Varsayılan yatırma
+        triGeo.rotateX(-Math.PI / 2); 
         
         const face = new THREE.Mesh(triGeo, mat);
 
@@ -4914,47 +4913,45 @@ window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
             // i=0: Sağ(2) | i=1: Arka(3) | i=2: Sol(4) | i=3: Ön(5)
 
             if (i === 0) { 
-                // --- 2 NUMARA (SAĞ) - Y EKSENİ ---
+                // --- 2 NUMARA (SAĞ) ---
                 hinge.position.set(s/2, 0, 0);
-                
-                // Menteşenin Y eksenini, Tabanın Z ekseni (Kenar) ile hizalıyoruz.
-                hinge.rotation.x = -Math.PI / 2; 
-                
-                // Üçgenin tabanını Menteşenin Y eksenine hizalamak için çeviriyoruz.
-                face.rotation.z = Math.PI / 2; 
+                hinge.rotation.x = -Math.PI / 2; // Y eksenini hizala
+                face.rotation.z = Math.PI / 2;   // Üçgeni hizala
 
-                rotationAxis = 'y'; // ARTIK Y EKSENİNDE DÖNECEK
-                finalClosedAngle = elevationAngle; // Yön (Sağ el kuralı gereği pozitif)
+                rotationAxis = 'y'; // Y Ekseninde dön
+                
+                // DÜZELTME BURADA: V56'da pozitifti, şimdi NEGATİF yaptık.
+                // Böylece yerde değil tepede başlayacak.
+                finalClosedAngle = -elevationAngle; 
             } 
             else if (i === 1) { 
-                // 3 NUMARA (ARKA) - X EKSENİ (TERS/DIŞA AÇILIR)
+                // --- 3 NUMARA (ARKA) - AYNI KALDI ---
                 hinge.position.set(0, 0, -s/2);      
                 hinge.rotation.y = Math.PI;          
                 rotationAxis = 'x';
-                finalClosedAngle = elevationAngle; // POZİTİF (Dışa açılma)
+                finalClosedAngle = elevationAngle; // Pozitif (Dışa açılır)
             } 
             else if (i === 2) { 
-                // --- 4 NUMARA (SOL) - Y EKSENİ ---
+                // --- 4 NUMARA (SOL) ---
                 hinge.position.set(-s/2, 0, 0);      
-                
-                // Menteşenin Y eksenini hizala
                 hinge.rotation.x = -Math.PI / 2; 
-                
-                // Üçgeni hizala
                 face.rotation.z = Math.PI / 2; 
 
-                rotationAxis = 'y'; // ARTIK Y EKSENİNDE DÖNECEK
-                finalClosedAngle = -elevationAngle; // Yön (Negatif)
+                rotationAxis = 'y'; // Y Ekseninde dön
+                
+                // DÜZELTME BURADA: V56'da negatifti, şimdi POZİTİF yaptık.
+                // Simetrik olarak tepede başlaması için.
+                finalClosedAngle = elevationAngle; 
             } 
             else if (i === 3) { 
-                // 5 NUMARA (ÖN) - X EKSENİ (TERS/DIŞA AÇILIR)
+                // --- 5 NUMARA (ÖN) - AYNI KALDI ---
                 hinge.position.set(0, 0, s/2);       
                 hinge.rotation.y = 0; 
                 rotationAxis = 'x';
-                finalClosedAngle = -elevationAngle; // NEGATİF (Dışa açılma)
+                finalClosedAngle = -elevationAngle; // Negatif (Dışa açılır)
             }
         } else {
-            // Diğer şekiller (Üçgen vb) - Standart X ekseni
+            // Diğer şekiller
             const angleStep = (Math.PI * 2) / sideCount;
             let rotOffset = (sideCount === 3) ? -Math.PI/2 : (Math.PI/2 + Math.PI/sideCount);
             const midEdgeAngle = (i * angleStep) + (angleStep / 2) + rotOffset;
@@ -4964,10 +4961,10 @@ window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
 
         baseMesh.add(hinge);
 
-        if(!isCylinder) face.add(new THREE.LineSegments(new THREE.EdgesGeometry(triGeo), lineMat)); // triGeo yerine face.geometry kullanmıyoruz çünkü klonlanmadı
+        if(!isCylinder) face.add(new THREE.LineSegments(new THREE.EdgesGeometry(triGeo), lineMat));
         
         if(!isCylinder) {
-            const label = createMicroLabelV56((i + 2).toString());
+            const label = createMicroLabelV57((i + 2).toString());
             label.position.set(0, 0.1, -slantHeight / 2); 
             face.add(label);
         }
@@ -4975,9 +4972,10 @@ window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
         hinge.add(face);
 
         // ANİMASYON
+        // OpenAngle her zaman 0 (Yere yatış)
         animParts.push({ 
             mesh: hinge, 
-            axis: rotationAxis, // Dinamik eksen (X veya Y)
+            axis: rotationAxis, 
             closedAngle: finalClosedAngle, 
             openAngle: 0 
         });
