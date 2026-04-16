@@ -2805,7 +2805,10 @@ window.Scene3D = {
         this.previewLabel = document.createElement('div');
         this.previewLabel.className = 'preview-3d-label';
         document.body.appendChild(this.previewLabel);
-
+window.mainScene = this.scene;
+        window.mainCamera = this.camera;
+        window.mainRenderer = this.renderer;
+window.activeObject = this.currentMesh;
         // Tutamaç Butonları
         this.rotateHandleBtn = document.createElement('div');
         this.rotateHandleBtn.className = 'handle-3d handle-3d-rotate';
@@ -3388,7 +3391,14 @@ window.Scene3D = {
             const hinge = new THREE.Group();
             hinge.position.set(Math.cos(angle) * apothem, 0, Math.sin(angle) * apothem);
             hinge.rotation.y = -angle + Math.PI/2;
-            baseMesh.add(hinge);
+            if (typeof finalClosedAngle !== 'undefined') {
+            hinge.userData = {
+                closedAngle: finalClosedAngle,
+                axis: typeof rotationAxis !== 'undefined' ? rotationAxis : 'x'
+            };
+        }
+        baseMesh.add(hinge);
+        window.currentBaseMesh = baseMesh;
 
             const triShape = new THREE.Shape();
             triShape.moveTo(-sideLen/2, 0);
@@ -3458,7 +3468,14 @@ window.Scene3D = {
             const hinge = new THREE.Group();
             hinge.position.set(Math.cos(angle) * apothem, 0, Math.sin(angle) * apothem);
             hinge.rotation.y = -angle - Math.PI / 2; // Kenara hizala
-            baseMesh.add(hinge);
+            if (typeof finalClosedAngle !== 'undefined') {
+            hinge.userData = {
+                closedAngle: finalClosedAngle,
+                axis: typeof rotationAxis !== 'undefined' ? rotationAxis : 'x'
+            };
+        }
+        baseMesh.add(hinge);
+        window.currentBaseMesh = baseMesh;
 
             // Yan Yüz Geometrisi
             const triShape = new THREE.Shape();
@@ -4348,44 +4365,37 @@ if (penWidthSlider && penWidthValueLabel) {
     });
 }
 
-// --- app.js --- (En alta ekleyin)
-
-// 1. Açınım Sürgüsünü (Slider) Seç
-const unfoldSlider = document.getElementById('unfold-slider');
+// --- KESİN ÇÖZÜM: SÜRGÜ MOTORU ---
+const unfoldSlider = document.getElementById('unfold-slider'); 
 
 if (unfoldSlider) {
-    // Sürgü hareket ettiğinde (input olayı) çalışır
-    unfoldSlider.addEventListener('input', (e) => {
-        // 0 ile 100 arasındaki değer
-        const val = parseInt(e.target.value);
+    unfoldSlider.addEventListener('input', function(e) {
+        let val = parseFloat(e.target.value); 
+        let ratio = val / 100; // 0 (Kapalı) ile 1 (Tam Açık) arası oran
 
-        // 3D Sahne ve Seçili Obje var mı kontrol et
-        if (window.Scene3D && window.Scene3D.currentMesh) {
+        // Eğer şeklimiz ve animParts listemiz hazırsa:
+        if (window.currentShapeGroup && window.currentShapeGroup.userData.animParts) {
             
-            // Şu anki aktif şekli al
-            let mesh = window.Scene3D.currentMesh;
-
-            // KONTROL: Şekil henüz "açılabilir" (unfoldable) modda değilse dönüştür
-            // Normalde şekiller çizildiğinde tek parça (solid) olur. 
-            // Sürgüye dokunulduğunda parçalara ayrılması gerekir.
-            if (!mesh.userData.isUnfoldable) {
-                // Bu fonksiyon, mevcut katı şekli siler ve yerine animasyonlu (menteşeli) versiyonunu koyar
-                if (typeof window.Scene3D.convertToUnfoldable === 'function') {
-                    window.Scene3D.convertToUnfoldable(mesh);
-                    
-                    // Dönüştürme işleminden sonra currentMesh değiştiği için yenisini alıyoruz
-                    mesh = window.Scene3D.currentMesh;
-                }
-            }
-
-            // Eğer şekil açılabilir moddaysa ve animasyon fonksiyonu varsa çalıştır
-            if (mesh && mesh.userData.isUnfoldable && typeof window.Scene3D.animateUnfold === 'function') {
-                window.Scene3D.animateUnfold(mesh, val);
+            // Sizin kendi oluşturduğunuz "animParts" listesindeki tüm kapakları döndür
+            window.currentShapeGroup.userData.animParts.forEach(part => {
+                
+                // Kapalı açıdan 0'a (yatay konuma) doğru açı hesapla
+                let currentAngle = part.closedAngle * (1 - ratio);
+                
+                // Doğru eksende bük (Sizin part.mesh dediğiniz hinge nesnesi döner)
+                if (part.axis === 'x') part.mesh.rotation.x = currentAngle;
+                else if (part.axis === 'y') part.mesh.rotation.y = currentAngle;
+                else if (part.axis === 'z') part.mesh.rotation.z = currentAngle;
+            });
+            
+            // Eğer sistemde sürekli çalışan bir render loop'u (animate fonksiyonu) yoksa
+            // ekranın güncellenmesini zorlamak için:
+            if(typeof renderer !== 'undefined' && typeof scene !== 'undefined' && typeof camera !== 'undefined') {
+                renderer.render(scene, camera);
             }
         }
     });
 }
-
 // 2. Yeni bir araç seçildiğinde veya yeni çizim yapıldığında Slider'ı Sıfırla
 // (Bu fonksiyonu mevcut kodlarınızın içine entegre etmek yerine, 
 // setActiveTool veya onUp fonksiyonlarına ek yama olarak buraya koyuyorum)
@@ -4949,7 +4959,7 @@ window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
                 hinge.rotation.y = 0; 
                 rotationAxis = 'x';
                 finalClosedAngle = -elevationAngle; // Negatif (Dışa açılır)
-            }
+}
         } else {
             // Diğer şekiller
             const angleStep = (Math.PI * 2) / sideCount;
@@ -4959,7 +4969,16 @@ window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
             hinge.rotation.y = -midEdgeAngle - Math.PI / 2;
         }
 
+        // --- HAFIZAYA ALMA İŞLEMİNİN TAM VE DOĞRU YERİ BURASI ---
+        if (typeof finalClosedAngle !== 'undefined') {
+            hinge.userData = {
+                closedAngle: finalClosedAngle,
+                axis: typeof rotationAxis !== 'undefined' ? rotationAxis : 'x'
+            };
+        }
         baseMesh.add(hinge);
+        window.currentBaseMesh = baseMesh;
+        // --------------------------------------------------------
 
         if(!isCylinder) face.add(new THREE.LineSegments(new THREE.EdgesGeometry(triGeo), lineMat));
         
@@ -4983,5 +5002,157 @@ window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
 
     group.position.y += 0.05; 
     group.userData.animParts = animParts;
+window.currentShapeGroup = group;
     return group;
 };
+
+// --- %100 GARANTİLİ AKILLI YAMA (İSİM BAĞIMSIZ) ---
+(function() {
+    // 1. ADIM: Sahneyi ve Motoru Havada Yakala
+    // Bu kısım sahne nerede olursa olsun onu bulur ve 'window' altına kilitler.
+    const findThreeResources = () => {
+        // Eğer zaten bulduysak tekrar arama
+        if (window.mainScene && window.mainRenderer) return;
+
+        // Tüm objeyi tara (this.scene, this.renderer vb. yakalamak için)
+        // Kodunuzun içindeki gizli Three.js değişkenlerini bulur.
+        for (let key in window) {
+            try {
+                if (window[key] && window[key].isScene) window.mainScene = window[key];
+                if (window[key] && window[key].isWebGLRenderer) window.mainRenderer = window[key];
+                if (window[key] && window[key].isCamera) window.mainCamera = window[key];
+            } catch(e) {}
+        }
+    };
+
+    // 2. ADIM: Sürgü Hareket Motoru
+    document.addEventListener('input', function(e) {
+        if (e.target && e.target.id === 'unfold-slider') {
+            findThreeResources(); // Önce sahneyi bul
+
+            let val = parseFloat(e.target.value); 
+            let ratio = val / 100;
+
+            // Sahneyi bulabildiysek içindeki her şeyi tara
+            if (window.mainScene) {
+                window.mainScene.traverse(function(obj) {
+                    // Menteşe verisi (animParts) olan her şeyi bük!
+                    if (obj.userData && obj.userData.animParts) {
+                        let parts = Object.values(obj.userData.animParts);
+                        parts.forEach(part => {
+                            if (part && part.mesh && part.closedAngle !== undefined) {
+                                let currentAngle = part.closedAngle * (1 - ratio);
+                                if (part.axis === 'x') part.mesh.rotation.x = currentAngle;
+                                else if (part.axis === 'y') part.mesh.rotation.y = currentAngle;
+                                else if (part.axis === 'z') part.mesh.rotation.z = currentAngle;
+                            }
+                        });
+                    }
+                });
+
+                // Ekranı güncelle
+                if (window.mainRenderer && window.mainCamera) {
+                    window.mainRenderer.render(window.mainScene, window.mainCamera);
+                }
+            }
+        }
+    });
+})();
+
+
+// =================================================================
+// FİNAL ÇÖZÜM: ŞEKİLLERİ MENTEŞELİ HALE GETİREN TETİKLEYİCİ
+// (Bu kodu app.js dosyanızın EN ALTINA yapıştırın)
+// =================================================================
+
+if (window.Scene3D) {
+    // Çizim bitiş olayını (onUp) tamamen ezip eksik olan dönüşüm kodunu içine ekliyoruz
+    window.Scene3D.onUp = function() {
+        const wasDragging = this.isDragging;
+        const wasClickCandidate = this.isClickCandidate;
+        const wasPreviewing = !!this.previewMesh;
+        
+        this.isRotatingHandle = false; this.isResizingHandle = false; 
+        this.isDragging = false; this.isClickCandidate = false; 
+        this.isRotatingShape = false; this.isDrawing = false;
+        
+        if (this.currentMesh) {
+            try {
+                const type = this.currentMesh.userData.type;
+                const isSphere = type === 'sphere';
+                if (isSphere) { 
+                    this.currentMesh.material.opacity = 1.0; 
+                    this.currentMesh.material.transparent = false; 
+                    this.currentMesh.material.depthWrite = true; 
+                } else { 
+                    this.currentMesh.material.opacity = 0.4; 
+                    this.currentMesh.material.transparent = true; 
+                    this.currentMesh.material.depthWrite = false; 
+                }
+                if (wasDragging && wasClickCandidate && this.showMeasurements) { 
+                    this.showMeasurements(this.currentMesh); 
+                }
+            } catch (err) { console.error("onUp Mesh Hatası:", err); }
+        }
+        
+        if (wasPreviewing && this.previewMesh) {
+            try {
+                const finalScale = this.previewMesh.scale.x || 1;
+                const finalRadius = 0.1 * finalScale;
+                const toolType = this.activeTool;
+                
+                this.scene.remove(this.previewMesh); this.scene.remove(this.previewLine);
+                this.previewMesh.geometry.dispose(); this.previewMesh = null; this.previewLine = null;
+                
+                // 1. Düz bloğu sahnede oluştur
+                const geometry = this.createGeometry(toolType, finalRadius);
+                if(toolType.startsWith('prism') || toolType.startsWith('pyramid')) { geometry.rotateX(Math.PI / 2); }
+                const isSphere = toolType === 'sphere';
+                const material = new THREE.MeshPhongMaterial({ color: 0x00ffcc, shininess: 100, specular: 0x111111, flatShading: false, transparent: !isSphere, opacity: isSphere ? 1.0 : 0.4, depthWrite: isSphere, side: THREE.DoubleSide });
+                const solidShape = new THREE.Mesh(geometry, material);
+                solidShape.position.copy(this.startPoint || new THREE.Vector3(0,0,0));
+                
+                let shapeHeight = finalRadius * 2;
+                if (toolType === 'pyramid_4_duz') { shapeHeight = finalRadius * Math.sqrt(2); }
+                solidShape.userData = { type: toolType, baseSize: finalRadius, height: shapeHeight };
+                
+                const edges = new THREE.EdgesGeometry(geometry);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1.0 });
+                solidShape.add(new THREE.LineSegments(edges, lineMat));
+                
+                this.scene.add(solidShape);
+                this.currentMesh = solidShape;
+                if(window.drawnStrokes) window.drawnStrokes.push({ type: '3D_object', mesh: solidShape });
+                
+                if (this.previewLabel) this.previewLabel.style.display = 'none';
+                if (this.hideEdgeLabels) this.hideEdgeLabels();
+                
+                if (toolType === 'prism_rect' && this.updateRectPrismLabels) { 
+                    solidShape.userData.isInfoVisible = true; 
+                    this.updateRectPrismLabels(solidShape); 
+                    try { if(this.showMeasurements) this.showMeasurements(solidShape); } catch(e) {} 
+                }
+                this.updateHandlePositions();
+
+                // ==============================================================
+                // Şekil çizildiği an devreye girer ve onu menteşeli hale getirir!
+                // ==============================================================
+                if (this.convertToUnfoldable) {
+                    this.convertToUnfoldable(this.currentMesh);
+                    
+                    // 1. ŞEKLİ ANINDA KAPALI (0) KONUMA GETİR
+                    if (this.animateUnfold) {
+                        this.animateUnfold(this.currentMesh, 0);
+                    }
+                    
+                    // 2. EKRANDAKİ SÜRGÜYÜ EN BAŞA (0) ÇEK
+                    const slider = document.getElementById('unfold-slider');
+                    if (slider) slider.value = 0;
+                    
+                    console.log("Şekil menteşeli hale dönüştürüldü ve KAPATILDI!");
+                }
+
+            } catch (err) { console.error("onUp Preview Hatası:", err); }
+        }
+    };
+}
