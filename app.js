@@ -5156,3 +5156,73 @@ if (window.Scene3D) {
         }
     };
 }
+
+// =================================================================
+// BİREYSEL KONTROL V2: "SUSTURUCU" YAMA (TÜMÜNÜ AÇMA SORUNUNU KESER)
+// (Bu kodu app.js'nin en altına yapıştırın)
+// =================================================================
+
+(function() {
+    // 1. Sürgüyü klonla (Üzerindeki eski dinleyicileri temizler)
+    const oldSlider = document.getElementById('unfold-slider');
+    if (oldSlider) {
+        const newSlider = oldSlider.cloneNode(true);
+        oldSlider.parentNode.replaceChild(newSlider, oldSlider);
+
+        // 2. Yeni Dinleyici (Sadece Seçili Olanı Açar)
+        newSlider.addEventListener('input', function(e) {
+            
+            // İŞTE SİHİRLİ KOMUT: V57'deki "document" dinleyicisini sağır eder!
+            // Bu sayede eski kodlar tetiklenemez.
+            e.stopPropagation();
+
+            let val = parseFloat(e.target.value); 
+            let ratio = val / 100;
+
+            if (window.Scene3D && window.Scene3D.currentMesh && window.Scene3D.currentMesh.userData.animParts) {
+                let mesh = window.Scene3D.currentMesh;
+                
+                // Şeklin kendi özel açılma değerini kendi hafızasına kaydet
+                mesh.userData.unfoldValue = val; 
+
+                // SADECE SEÇİLİ ŞEKLİN parçalarını döndür
+                let parts = Object.values(mesh.userData.animParts);
+                parts.forEach(part => {
+                    if (part && part.mesh && part.closedAngle !== undefined) {
+                        let currentAngle = part.closedAngle * (1 - ratio);
+                        if (part.axis === 'x') part.mesh.rotation.x = currentAngle;
+                        else if (part.axis === 'y') part.mesh.rotation.y = currentAngle;
+                        else if (part.axis === 'z') part.mesh.rotation.z = currentAngle;
+                    }
+                });
+
+                // Ekranı güncelle
+                if (window.Scene3D.renderer && window.Scene3D.scene && window.Scene3D.camera) {
+                    window.Scene3D.renderer.render(window.Scene3D.scene, window.Scene3D.camera);
+                }
+            }
+        });
+        
+        // Tetiklenmeyi garanti altına almak için change event'ini de susturalım
+        newSlider.addEventListener('change', function(e) { e.stopPropagation(); });
+    }
+
+    // 3. FARKLI ŞEKLE TIKLAYINCA SÜRGÜYÜ ONUN HAFIZASINA GÖRE GÜNCELLE
+    if (window.Scene3D && typeof window.Scene3D.onDown === 'function') {
+        if (!window.Scene3D.onDown.isProxiedFinal) {
+            const originalOnDown = window.Scene3D.onDown;
+            window.Scene3D.onDown = function(x, y) {
+                const result = originalOnDown.call(this, x, y);
+                // Bir şekil seçildiyse sürgüyü onun açık/kapalı durumuna göre çek
+                if (this.currentMesh && this.currentMesh.userData && this.currentMesh.userData.animParts) {
+                    const slider = document.getElementById('unfold-slider');
+                    if (slider) {
+                        slider.value = this.currentMesh.userData.unfoldValue || 0;
+                    }
+                }
+                return result;
+            };
+            window.Scene3D.onDown.isProxiedFinal = true;
+        }
+    }
+})();
