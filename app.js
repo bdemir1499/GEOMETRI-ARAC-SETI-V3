@@ -4438,7 +4438,7 @@ if (typeof window.setActiveTool === 'function') {
 }
 
 // =================================================================
-// V96 - NİHAİ KUSURSUZ KARTON KUTU AÇINIMI (PİRAMİT + PRİZMA)
+// V98 - SİLİNDİR VE KONİ İSİM/ALGI DÜZELTMESİ (GÜÇLÜ KONTROL)
 // =================================================================
 
 if (window.Scene3D) {
@@ -4447,23 +4447,32 @@ if (window.Scene3D) {
     }
 
     window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
-        const isPyramid = type.startsWith('pyramid') || type === 'cone';
+        // İsimleri her ihtimale karşı küçük harfe çevirip tarıyoruz
+        const typeStr = (type || "").toLowerCase();
+        
+        // PİRAMİT Mİ KONİ Mİ? (Kelime Avcısı)
+        const isPyramid = typeStr.startsWith('pyramid') || typeStr.includes('cone') || typeStr.includes('koni');
         
         const group = new THREE.Group();
         group.userData.isUnfoldable = true; 
-        group.userData.type = type;
+        group.userData.type = typeStr;
         
         const mat = new THREE.MeshPhongMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
         const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
         
         let n = parseInt(sides);
-        const match = type.match(/\d+/);
+        const match = typeStr.match(/\d+/);
         if (match) n = parseInt(match[0]);
-        if (isNaN(n) || n < 3) n = 4;
-        if (type === 'cone') n = 32;
+        
+        // SİLİNDİR VEYA KONİ İSE KESİNLİKLE 32 KENAR YAP
+        if (typeStr.includes('cylinder') || typeStr.includes('silindir') || typeStr.includes('cone') || typeStr.includes('koni')) {
+            n = 32;
+        } else if (isNaN(n) || n < 3) {
+            n = 4;
+        }
 
         // ==========================================
-        // A) PİRAMİT ÜRETİCİSİ (Kusursuz Matematik)
+        // A) PİRAMİT VE KONİ ÜRETİCİSİ
         // ==========================================
         if (isPyramid) {
             group.userData.isMathPyramid = true; 
@@ -4486,6 +4495,7 @@ if (window.Scene3D) {
             baseGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(baseVertices), 3));
             baseGeo.computeVertexNormals();
             const baseMesh = new THREE.Mesh(baseGeo, mat);
+            // Kenar sayımız 32 olduğu için beyaz çizgileri gizliyoruz (yuvarlak görünsün diye)
             if (n < 20) {
                 const perimGeo = new THREE.BufferGeometry();
                 perimGeo.setFromPoints([...basePts, basePts[0]]);
@@ -4509,21 +4519,17 @@ if (window.Scene3D) {
             window.updatePyramidGeometry(group, 0);
         } 
         // ==========================================
-        // B) PRİZMA ÜRETİCİSİ (Karton Kutu Açınımı)
+        // B) PRİZMA VE SİLİNDİR ÜRETİCİSİ
         // ==========================================
         else {
             const animParts = [];
+            const s = 2 * size * Math.sin(Math.PI / n); 
+            const Ri = size * Math.cos(Math.PI / n);    
+            const foldAngle = (Math.PI * 2) / n;        
 
-            // Temel Geometrik Hesaplamalar
-            const s = 2 * size * Math.sin(Math.PI / n); // Bir kenar uzunluğu
-            const Ri = size * Math.cos(Math.PI / n);    // Merkeze uzaklık (Apotem)
-            const foldAngle = (Math.PI * 2) / n;        // Katlanma açısı
-
-            // Yan Duvar (Merkezi sola hizalanmış)
             const faceGeo = new THREE.PlaneGeometry(s, height);
             faceGeo.translate(s / 2, 0, 0);
 
-            // Üst Kapak Çizimi (+Y yönüne doğru)
             const topShape = new THREE.Shape();
             topShape.moveTo(0, 0);
             let cx = 0, cy = 0, cAng = 0;
@@ -4536,7 +4542,6 @@ if (window.Scene3D) {
             }
             const topGeo = new THREE.ShapeGeometry(topShape);
 
-            // Alt Kapak Çizimi (-Y yönüne doğru)
             const botShape = new THREE.Shape();
             botShape.moveTo(0, 0);
             let bx = 0, by = 0, bAng = 0;
@@ -4549,17 +4554,14 @@ if (window.Scene3D) {
             }
             const botGeo = new THREE.ShapeGeometry(botShape);
 
-            // Tüm şekli ortaya hizalamak için Offset (Merkezleme)
             const offsetGroup = new THREE.Group();
             offsetGroup.position.set(-s/2, 0, -Ri);
             group.add(offsetGroup);
 
-            let parentHinge = offsetGroup; // Zincirin başlangıç noktası
+            let parentHinge = offsetGroup;
 
-            // Duvarları Zincirleme Ekleme
             for (let i = 0; i < n; i++) {
                 const hinge = new THREE.Group();
-                // İlk duvar merkeze, sonrakiler bir önceki duvarın SAĞ kenarına eklenir
                 if (i === 0) hinge.position.set(0, 0, 0);
                 else hinge.position.set(s, 0, 0);
                 
@@ -4569,14 +4571,11 @@ if (window.Scene3D) {
                 if (n < 20) faceMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMat));
                 hinge.add(faceMesh);
 
-                // Duvarlar içe doğru (Z eksenine) katlanır
                 if (i > 0) {
                     animParts.push({ mesh: hinge, axis: 'y', closedAngle: -foldAngle, openAngle: 0 });
                 }
 
-                // Alt ve Üst Kapaklar sadece İlk Duvara (Face 0) eklenir
                 if (i === 0) {
-                    // ÜST KAPAK
                     const topHinge = new THREE.Group();
                     topHinge.position.set(0, height/2, 0);
                     hinge.add(topHinge);
@@ -4585,7 +4584,6 @@ if (window.Scene3D) {
                     topHinge.add(topMesh);
                     animParts.push({ mesh: topHinge, axis: 'x', closedAngle: Math.PI/2, openAngle: 0 });
 
-                    // ALT KAPAK
                     const botHinge = new THREE.Group();
                     botHinge.position.set(0, -height/2, 0);
                     hinge.add(botHinge);
@@ -4595,12 +4593,10 @@ if (window.Scene3D) {
                     animParts.push({ mesh: botHinge, axis: 'x', closedAngle: -Math.PI/2, openAngle: 0 });
                 }
 
-                parentHinge = hinge; // Bir sonraki duvar, bu duvarın ucuna eklenecek
+                parentHinge = hinge; 
             }
 
             group.userData.animParts = animParts;
-
-            // Şekil doğduğunda kapalı olsun
             group.userData.animParts.forEach(part => {
                 part.mesh.rotation[part.axis] = part.closedAngle;
             });
@@ -4611,7 +4607,6 @@ if (window.Scene3D) {
         return group;
     };
 
-    // Piramit Matematik Fonksiyonu (Korundu)
     window.updatePyramidGeometry = function(group, ratio) {
         const n = group.userData.sides;
         const R = group.userData.R;
@@ -4644,7 +4639,6 @@ if (window.Scene3D) {
         }
     };
 
-    // ONUP YAMASI
     window.Scene3D.onUp = function() {
         const wasPreviewing = !!this.previewMesh;
         this.isDragging = false; 
@@ -4656,20 +4650,23 @@ if (window.Scene3D) {
         if (wasPreviewing && this.previewMesh) {
             const finalScale = this.previewMesh.scale.x || 1;
             const finalRadius = 0.1 * finalScale;
-            const toolType = this.activeTool;
+            const toolType = (this.activeTool || "").toLowerCase();
             
             this.scene.remove(this.previewMesh);
             if (this.previewLine) this.scene.remove(this.previewLine);
             this.previewMesh = null;
 
             let solidShape;
-            const isPyramid = toolType.startsWith('pyramid') || toolType === 'cone';
-            const isPrism = toolType.startsWith('prism');
+            const isPyramid = toolType.startsWith('pyramid') || toolType.includes('cone') || toolType.includes('koni');
+            const isPrism = toolType.startsWith('prism') || toolType.includes('cylinder') || toolType.includes('silindir');
 
             if ((isPyramid || isPrism) && typeof this.createUnfoldablePrism === 'function') {
                 let n = 4;
                 const match = toolType.match(/\d+/);
                 if (match) n = parseInt(match[0]);
+                
+                if (toolType.includes('cylinder') || toolType.includes('silindir') || toolType.includes('cone') || toolType.includes('koni')) n = 32;
+                
                 const h = isPyramid ? (finalRadius * 1.6) : (finalRadius * 2);
                 solidShape = this.createUnfoldablePrism(n, finalRadius, h, toolType);
             } else {
@@ -4690,7 +4687,6 @@ if (window.Scene3D) {
         }
     };
 
-    // SEÇİM ZIRHI
     if (!window.Scene3D._meshTrapInstalled) {
         let actualMesh = window.Scene3D.currentMesh;
         Object.defineProperty(window.Scene3D, 'currentMesh', {
@@ -4713,7 +4709,6 @@ if (window.Scene3D) {
     }
 }
 
-// SÜRGÜ (SLIDER) MOTORU
 document.addEventListener('input', function(e) {
     if (e.target && e.target.id === 'unfold-slider') {
         const val = parseFloat(e.target.value);
