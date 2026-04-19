@@ -4438,20 +4438,14 @@ if (typeof window.setActiveTool === 'function') {
 }
 
 // =================================================================
-// V98 - SİLİNDİR VE KONİ İSİM/ALGI DÜZELTMESİ (GÜÇLÜ KONTROL)
+// V102 - NİHAİ KUSURSUZ SİSTEM (Saf Matematiksel Küre Açınımı)
 // =================================================================
 
 if (window.Scene3D) {
-    if (!window.Scene3D.originalPrismMethod) {
-        window.Scene3D.originalPrismMethod = window.Scene3D.createUnfoldablePrism;
-    }
-
     window.Scene3D.createUnfoldablePrism = function(sides, size, height, type) {
-        // İsimleri her ihtimale karşı küçük harfe çevirip tarıyoruz
         const typeStr = (type || "").toLowerCase();
-        
-        // PİRAMİT Mİ KONİ Mİ? (Kelime Avcısı)
         const isPyramid = typeStr.startsWith('pyramid') || typeStr.includes('cone') || typeStr.includes('koni');
+        const isSphere = typeStr.includes('sphere') || typeStr.includes('küre');
         
         const group = new THREE.Group();
         group.userData.isUnfoldable = true; 
@@ -4464,21 +4458,16 @@ if (window.Scene3D) {
         const match = typeStr.match(/\d+/);
         if (match) n = parseInt(match[0]);
         
-        // SİLİNDİR VEYA KONİ İSE KESİNLİKLE 32 KENAR YAP
-        if (typeStr.includes('cylinder') || typeStr.includes('silindir') || typeStr.includes('cone') || typeStr.includes('koni')) {
-            n = 32;
-        } else if (isNaN(n) || n < 3) {
-            n = 4;
-        }
+        if (isSphere) n = 12; 
+        else if (typeStr.includes('cylinder') || typeStr.includes('silindir') || typeStr.includes('cone') || typeStr.includes('koni')) n = 32;
+        else if (isNaN(n) || n < 3) n = 4;
 
         // ==========================================
-        // A) PİRAMİT VE KONİ ÜRETİCİSİ
+        // A) PİRAMİT VE KONİ (Morf Motoru)
         // ==========================================
         if (isPyramid) {
             group.userData.isMathPyramid = true; 
-            group.userData.sides = n;
-            group.userData.R = size;
-            group.userData.H = height;
+            group.userData.sides = n; group.userData.R = size; group.userData.H = height;
             group.userData.faceMeshes = [];
 
             let basePts = [];
@@ -4495,7 +4484,6 @@ if (window.Scene3D) {
             baseGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(baseVertices), 3));
             baseGeo.computeVertexNormals();
             const baseMesh = new THREE.Mesh(baseGeo, mat);
-            // Kenar sayımız 32 olduğu için beyaz çizgileri gizliyoruz (yuvarlak görünsün diye)
             if (n < 20) {
                 const perimGeo = new THREE.BufferGeometry();
                 perimGeo.setFromPoints([...basePts, basePts[0]]);
@@ -4507,19 +4495,99 @@ if (window.Scene3D) {
                 const faceGeo = new THREE.BufferGeometry();
                 faceGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
                 const faceMesh = new THREE.Mesh(faceGeo, mat);
-                if (n < 20) {
-                    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMat);
-                    faceMesh.add(edges);
-                    faceMesh.userData.edges = edges; 
-                }
+                if (n < 20) faceMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMat));
                 group.add(faceMesh);
                 group.userData.faceMeshes.push(faceMesh);
             }
-
             window.updatePyramidGeometry(group, 0);
         } 
         // ==========================================
-        // B) PRİZMA VE SİLİNDİR ÜRETİCİSİ
+        // B) KÜRE (Pürüzsüz Harita İzdüşümü Morf Motoru)
+        // ==========================================
+        else if (isSphere) {
+            group.userData.isMathSphere = true;
+            const R = size * 1.5; 
+            group.userData.R = R;
+            group.userData.sides = n;
+            group.userData.slices = [];
+            
+            const rows = 16;
+            const cols = 4;
+            
+            for (let i = 0; i < n; i++) {
+                const A = i * (Math.PI * 2 / n);
+                const cosA = Math.cos(A);
+                const sinA = Math.sin(A);
+                
+                const verts = new Float32Array((rows + 1) * (cols + 1) * 3);
+                const target0 = new Float32Array((rows + 1) * (cols + 1) * 3);
+                const target1 = new Float32Array((rows + 1) * (cols + 1) * 3);
+                const indices = [];
+                
+                let idx = 0;
+                for (let r = 0; r <= rows; r++) {
+                    const v = r / rows;
+                    const theta = v * Math.PI; // 0 (Güney Kutbu) -> PI (Kuzey Kutbu)
+                    for (let c = 0; c <= cols; c++) {
+                        const u = (c / cols) - 0.5;
+                        const phi = u * (Math.PI * 2 / n);
+                        
+                        // 1. Kapalı 3D Formu (Küre)
+                        const lx0 = R * Math.sin(theta) * Math.sin(phi);
+                        const ly0 = R - R * Math.cos(theta); // Yere değecek şekilde
+                        const lz0 = R * Math.sin(theta) * Math.cos(phi);
+                        
+                        target0[idx] = lx0 * cosA + lz0 * sinA;
+                        target0[idx+1] = ly0;
+                        target0[idx+2] = -lx0 * sinA + lz0 * cosA;
+                        
+                        // 2. Açık 2D Formu (Düz Yıldız Haritası - Asla çakışmaz)
+                        const lx1 = R * Math.sin(theta) * phi; 
+                        const ly1 = 0; // Tamamen yer düzlemine (0) iniyor
+                        const lz1 = R * theta; // Dışa doğru uzunluğu
+                        
+                        target1[idx] = lx1 * cosA + lz1 * sinA;
+                        target1[idx+1] = ly1;
+                        target1[idx+2] = -lx1 * sinA + lz1 * cosA;
+                        
+                        verts[idx] = target0[idx];
+                        verts[idx+1] = target0[idx+1];
+                        verts[idx+2] = target0[idx+2];
+                        
+                        idx += 3;
+                    }
+                }
+                
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const a = r * (cols + 1) + c;
+                        const b = a + 1;
+                        const d = (r + 1) * (cols + 1) + c;
+                        const e = d + 1;
+                        indices.push(a, b, d);
+                        indices.push(b, e, d);
+                    }
+                }
+                
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+                geo.setIndex(indices);
+                geo.computeVertexNormals();
+                
+                const mesh = new THREE.Mesh(geo, mat);
+                const edges = new THREE.EdgesGeometry(geo, 30);
+                mesh.add(new THREE.LineSegments(edges, lineMat));
+                
+                mesh.userData.target0 = target0;
+                mesh.userData.target1 = target1;
+                
+                group.add(mesh);
+                group.userData.slices.push(mesh);
+            }
+            window.updateSphereGeometry(group, 0); 
+        }
+        // ==========================================
+        // C) PRİZMA VE SİLİNDİR (Zincirleme Katlanma)
         // ==========================================
         else {
             const animParts = [];
@@ -4534,10 +4602,8 @@ if (window.Scene3D) {
             topShape.moveTo(0, 0);
             let cx = 0, cy = 0, cAng = 0;
             for(let i=0; i<n; i++) {
-                cx += s * Math.cos(cAng);
-                cy += s * Math.sin(cAng);
-                if(i === n-1) topShape.lineTo(0,0);
-                else topShape.lineTo(cx, cy);
+                cx += s * Math.cos(cAng); cy += s * Math.sin(cAng);
+                if(i === n-1) topShape.lineTo(0,0); else topShape.lineTo(cx, cy);
                 cAng += foldAngle;
             }
             const topGeo = new THREE.ShapeGeometry(topShape);
@@ -4546,10 +4612,8 @@ if (window.Scene3D) {
             botShape.moveTo(0, 0);
             let bx = 0, by = 0, bAng = 0;
             for(let i=0; i<n; i++) {
-                bx += s * Math.cos(bAng);
-                by += s * Math.sin(bAng);
-                if(i === n-1) botShape.lineTo(0,0);
-                else botShape.lineTo(bx, by);
+                bx += s * Math.cos(bAng); by += s * Math.sin(bAng);
+                if(i === n-1) botShape.lineTo(0,0); else botShape.lineTo(bx, by);
                 bAng -= foldAngle;
             }
             const botGeo = new THREE.ShapeGeometry(botShape);
@@ -4559,47 +4623,26 @@ if (window.Scene3D) {
             group.add(offsetGroup);
 
             let parentHinge = offsetGroup;
-
             for (let i = 0; i < n; i++) {
                 const hinge = new THREE.Group();
-                if (i === 0) hinge.position.set(0, 0, 0);
-                else hinge.position.set(s, 0, 0);
-                
+                if (i === 0) hinge.position.set(0, 0, 0); else hinge.position.set(s, 0, 0);
                 parentHinge.add(hinge);
-
                 const faceMesh = new THREE.Mesh(faceGeo, mat);
                 if (n < 20) faceMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMat));
                 hinge.add(faceMesh);
-
-                if (i > 0) {
-                    animParts.push({ mesh: hinge, axis: 'y', closedAngle: -foldAngle, openAngle: 0 });
-                }
-
+                if (i > 0) animParts.push({ mesh: hinge, axis: 'y', closedAngle: -foldAngle, openAngle: 0 });
                 if (i === 0) {
-                    const topHinge = new THREE.Group();
-                    topHinge.position.set(0, height/2, 0);
-                    hinge.add(topHinge);
-                    const topMesh = new THREE.Mesh(topGeo, mat);
-                    if (n < 20) topMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
-                    topHinge.add(topMesh);
-                    animParts.push({ mesh: topHinge, axis: 'x', closedAngle: Math.PI/2, openAngle: 0 });
-
-                    const botHinge = new THREE.Group();
-                    botHinge.position.set(0, -height/2, 0);
-                    hinge.add(botHinge);
-                    const botMesh = new THREE.Mesh(botGeo, mat);
-                    if (n < 20) botMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(botGeo), lineMat));
-                    botHinge.add(botMesh);
-                    animParts.push({ mesh: botHinge, axis: 'x', closedAngle: -Math.PI/2, openAngle: 0 });
+                    const tH = new THREE.Group(); tH.position.set(0, height/2, 0); hinge.add(tH);
+                    const tM = new THREE.Mesh(topGeo, mat); if (n < 20) tM.add(new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat));
+                    tH.add(tM); animParts.push({ mesh: tH, axis: 'x', closedAngle: Math.PI/2, openAngle: 0 });
+                    const bH = new THREE.Group(); bH.position.set(0, -height/2, 0); hinge.add(bH);
+                    const bM = new THREE.Mesh(botGeo, mat); if (n < 20) bM.add(new THREE.LineSegments(new THREE.EdgesGeometry(botGeo), lineMat));
+                    bH.add(bM); animParts.push({ mesh: bH, axis: 'x', closedAngle: -Math.PI/2, openAngle: 0 });
                 }
-
                 parentHinge = hinge; 
             }
-
             group.userData.animParts = animParts;
-            group.userData.animParts.forEach(part => {
-                part.mesh.rotation[part.axis] = part.closedAngle;
-            });
+            group.userData.animParts.forEach(p => p.mesh.rotation[p.axis] = p.closedAngle);
         }
 
         group.userData.unfoldValue = 0; 
@@ -4607,11 +4650,9 @@ if (window.Scene3D) {
         return group;
     };
 
+    // Piramit Matematik Motoru
     window.updatePyramidGeometry = function(group, ratio) {
-        const n = group.userData.sides;
-        const R = group.userData.R;
-        const H = group.userData.H;
-        const faces = group.userData.faceMeshes;
+        const n = group.userData.sides, R = group.userData.R, H = group.userData.H, faces = group.userData.faceMeshes;
         let basePts = [];
         for (let i = 0; i < n; i++) {
             let a = (2 * Math.PI * i) / n - Math.PI / 2;
@@ -4620,16 +4661,11 @@ if (window.Scene3D) {
         for (let i = 0; i < n; i++) {
             let V1 = basePts[i], V2 = basePts[(i + 1) % n];
             let Mx = (V1.x + V2.x) / 2, Mz = (V1.z + V2.z) / 2;
-            let Ri = Math.sqrt(Mx*Mx + Mz*Mz);
-            let L = Math.sqrt(Ri*Ri + H*H);
+            let Ri = Math.sqrt(Mx*Mx + Mz*Mz), L = Math.sqrt(Ri*Ri + H*H);
             let gamma = (1 - ratio) * Math.atan2(H, -Ri);
-            let Ax = Mx + L * Math.cos(gamma) * (Mx / Ri);
-            let Ay = L * Math.sin(gamma); 
-            let Az = Mz + L * Math.cos(gamma) * (Mz / Ri);
-            const positions = faces[i].geometry.attributes.position.array;
-            positions[0] = V1.x; positions[1] = V1.y; positions[2] = V1.z; 
-            positions[3] = V2.x; positions[4] = V2.y; positions[5] = V2.z; 
-            positions[6] = Ax;   positions[7] = Ay;   positions[8] = Az;   
+            let Ax = Mx + L * Math.cos(gamma) * (Mx / Ri), Ay = L * Math.sin(gamma), Az = Mz + L * Math.cos(gamma) * (Mz / Ri);
+            const pos = faces[i].geometry.attributes.position.array;
+            pos[0] = V1.x; pos[1] = V1.y; pos[2] = V1.z; pos[3] = V2.x; pos[4] = V2.y; pos[5] = V2.z; pos[6] = Ax; pos[7] = Ay; pos[8] = Az;   
             faces[i].geometry.attributes.position.needsUpdate = true;
             faces[i].geometry.computeVertexNormals();
             if (faces[i].userData.edges) {
@@ -4639,34 +4675,54 @@ if (window.Scene3D) {
         }
     };
 
+    // YENİ: Küre Matematik Motoru (Yüzeyleri Ütüleyerek Düzleştirir)
+    window.updateSphereGeometry = function(group, ratio) {
+        const slices = group.userData.slices;
+        for (let i = 0; i < slices.length; i++) {
+            const mesh = slices[i];
+            const pos = mesh.geometry.attributes.position.array;
+            const t0 = mesh.userData.target0;
+            const t1 = mesh.userData.target1;
+            
+            // 3D formdan 2D forma kusursuz geçiş (Morf)
+            for (let j = 0; j < pos.length; j++) {
+                pos[j] = t0[j] + (t1[j] - t0[j]) * ratio;
+            }
+            
+            mesh.geometry.attributes.position.needsUpdate = true;
+            mesh.geometry.computeVertexNormals();
+            if (mesh.children.length > 0) {
+                mesh.children[0].geometry.dispose();
+                mesh.children[0].geometry = new THREE.EdgesGeometry(mesh.geometry, 15);
+            }
+        }
+    };
+
+    // Güvenli onUp
     window.Scene3D.onUp = function() {
         const wasPreviewing = !!this.previewMesh;
-        this.isDragging = false; 
-        this.isRotatingShape = false; 
-        this.isDrawing = false;
-        this.isRotatingHandle = false; 
-        this.isResizingHandle = false;
+        this.isDragging = false; this.isRotatingShape = false; this.isDrawing = false;
+        this.isRotatingHandle = false; this.isResizingHandle = false;
 
         if (wasPreviewing && this.previewMesh) {
             const finalScale = this.previewMesh.scale.x || 1;
             const finalRadius = 0.1 * finalScale;
             const toolType = (this.activeTool || "").toLowerCase();
-            
             this.scene.remove(this.previewMesh);
             if (this.previewLine) this.scene.remove(this.previewLine);
             this.previewMesh = null;
 
             let solidShape;
             const isPyramid = toolType.startsWith('pyramid') || toolType.includes('cone') || toolType.includes('koni');
-            const isPrism = toolType.startsWith('prism') || toolType.includes('cylinder') || toolType.includes('silindir');
+            const isUnfoldable = isPyramid || toolType.startsWith('prism') || toolType.includes('cylinder') || toolType.includes('silindir') || toolType.includes('sphere') || toolType.includes('küre');
 
-            if ((isPyramid || isPrism) && typeof this.createUnfoldablePrism === 'function') {
+            if (isUnfoldable && typeof this.createUnfoldablePrism === 'function') {
                 let n = 4;
                 const match = toolType.match(/\d+/);
                 if (match) n = parseInt(match[0]);
-                
                 if (toolType.includes('cylinder') || toolType.includes('silindir') || toolType.includes('cone') || toolType.includes('koni')) n = 32;
-                
+                if (toolType.includes('sphere') || toolType.includes('küre')) n = 12;
+
                 const h = isPyramid ? (finalRadius * 1.6) : (finalRadius * 2);
                 solidShape = this.createUnfoldablePrism(n, finalRadius, h, toolType);
             } else {
@@ -4676,17 +4732,15 @@ if (window.Scene3D) {
                 solidShape.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), new THREE.LineBasicMaterial({color: 0xffffff})));
                 solidShape.userData.isUnfoldable = true; 
             }
-
             solidShape.position.copy(this.startPoint || new THREE.Vector3(0,0,0));
-            solidShape.userData.type = toolType;
             this.scene.add(solidShape);
             this.currentMesh = solidShape;
-
             const slider = document.getElementById('unfold-slider');
             if (slider) slider.value = 0;
         }
     };
 
+    // Seçim Zırhı
     if (!window.Scene3D._meshTrapInstalled) {
         let actualMesh = window.Scene3D.currentMesh;
         Object.defineProperty(window.Scene3D, 'currentMesh', {
@@ -4695,9 +4749,8 @@ if (window.Scene3D) {
                 if (val) {
                     let obj = val;
                     while (obj && obj.type !== 'Scene') {
-                        if (obj.userData && (obj.userData.isMathPyramid || obj.userData.animParts)) {
-                            actualMesh = obj;
-                            return;
+                        if (obj.userData && (obj.userData.isMathPyramid || obj.userData.isMathSphere || obj.userData.animParts)) {
+                            actualMesh = obj; return;
                         }
                         obj = obj.parent;
                     }
@@ -4709,18 +4762,18 @@ if (window.Scene3D) {
     }
 }
 
+// EVRENSEL SÜRGÜ MOTORU
 document.addEventListener('input', function(e) {
     if (e.target && e.target.id === 'unfold-slider') {
         const val = parseFloat(e.target.value);
         const ratio = val / 100;
         let mesh = (window.Scene3D && window.Scene3D.currentMesh) || window.currentShapeGroup;
 
-        if (mesh && !mesh.userData.animParts && !mesh.userData.isMathPyramid) {
+        if (mesh && !mesh.userData.animParts && !mesh.userData.isMathPyramid && !mesh.userData.isMathSphere) {
             let obj = mesh;
             while (obj && obj.type !== 'Scene') {
-                if (obj.userData && (obj.userData.animParts || obj.userData.isMathPyramid)) {
-                    mesh = obj;
-                    break;
+                if (obj.userData && (obj.userData.animParts || obj.userData.isMathPyramid || obj.userData.isMathSphere)) {
+                    mesh = obj; break;
                 }
                 obj = obj.parent;
             }
@@ -4729,9 +4782,15 @@ document.addEventListener('input', function(e) {
         if (mesh && mesh.userData) {
             mesh.userData.unfoldValue = val;
             
+            // Piramit Kontrolü
             if (mesh.userData.isMathPyramid && typeof window.updatePyramidGeometry === 'function') {
                 window.updatePyramidGeometry(mesh, ratio);
             } 
+            // Küre Kontrolü
+            else if (mesh.userData.isMathSphere && typeof window.updateSphereGeometry === 'function') {
+                window.updateSphereGeometry(mesh, ratio);
+            }
+            // Prizma Kontrolü
             else if (mesh.userData.animParts) {
                 mesh.userData.animParts.forEach(part => {
                     if (part.mesh && part.closedAngle !== undefined) {
@@ -4755,3 +4814,6 @@ document.addEventListener('mouseup', function() {
         s.value = mesh.userData.unfoldValue;
     }
 });
+
+
+
