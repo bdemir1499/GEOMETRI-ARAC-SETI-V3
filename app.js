@@ -547,6 +547,8 @@ window.distance = distance;
 
 // --- ARAÇ SEÇİMİ ---
 function setActiveTool(tool) {
+window.isEraserActive = false; // Varsayılan olarak silgi kapalı
+
 window.currentTool = tool;
     penButton.classList.remove('active');
     eraserButton.classList.remove('active');
@@ -616,9 +618,10 @@ if (window.Scene3D) {
         body.classList.add('cursor-pen');
         penOptions.classList.remove('hidden'); 
     } else if (tool === 'eraser') {
-        eraserButton.classList.add('active');
-        body.classList.add('cursor-eraser');
-    } else if (tool === 'point') {
+    eraserButton.classList.add('active');
+    body.classList.add('cursor-eraser');
+    window.isEraserActive = true; // Silgi aktif bayrağı
+} else if (tool === 'point') {
         lineButton.classList.add('active'); 
         pointButton.classList.add('active');
         // lineOptions.classList.remove('hidden');  <-- BU SATIRI SİLİN VEYA YORUMA ALIN
@@ -4855,5 +4858,94 @@ document.addEventListener('mouseup', function() {
     const mesh = (window.Scene3D && window.Scene3D.currentMesh);
     if (s && mesh && mesh.userData && mesh.userData.unfoldValue !== undefined) {
         s.value = mesh.userData.unfoldValue;
+    }
+});
+
+// =================================================================
+// V128 - HAYALET ÖLÇÜ AVCISI (3D Kalıntılarını Tamamen Siler)
+// =================================================================
+
+canvas.addEventListener('mousemove', (e) => {
+    if (!window.isEraserActive) return;
+    const pos = getEventPosition(e);
+
+    // 1. 3D ŞEKİL VE ONA AİT ÖLÇÜ KALINTILARINI SİLME
+    if (window.Scene3D && window.Scene3D.currentMesh) {
+        // Parçalanmayı önlemek için kök grubu bul
+        const root = window.Scene3D.getRootGroup ? window.Scene3D.getRootGroup(window.Scene3D.currentMesh) : window.Scene3D.currentMesh;
+        
+        // 3D merkez izdüşümünü hesapla
+        const meshPos = root.position.clone().project(window.Scene3D.camera);
+        const screenPos = {
+            x: (meshPos.x + 1) * canvas.width / 2,
+            y: -(meshPos.y - 1) * canvas.height / 2
+        };
+
+        // Silgi 3D şekle yaklaştıysa (Mesafe: 75 birim)
+        if (distance(pos, screenPos) < 75) {
+            // A) Şekli sahneden kaldır
+            window.Scene3D.scene.remove(root);
+            window.Scene3D.currentMesh = null;
+
+            // B) KRİTİK TEMİZLİK: Dizideki tüm hayalet ölçü yazılarını sil
+            // Çokgenleri ve çizgileri korumak için tip kontrolü yapıyoruz
+            for (let i = drawnStrokes.length - 1; i >= 0; i--) {
+                const s = drawnStrokes[i];
+                
+                // Etiket (isLabel), Metin (text) veya 3D etiket olarak işaretlenmiş her şeyi sil
+                // Ama noktaları (point) veya çokgenleri (points/vertices) olanları elleme!
+                const isDrawing = s.points || s.vertices || s.path || s.p1;
+                
+                if (!isDrawing && (s.type === 'text' || s.isLabel || s.text !== undefined || s.is3DLabel)) {
+                    drawnStrokes.splice(i, 1);
+                }
+            }
+
+            // C) Sahneyi ve Kanvası güncelle
+            if(window.Scene3D.renderer) window.Scene3D.renderer.render(window.Scene3D.scene, window.Scene3D.camera);
+            redrawAllStrokes(); 
+            if(window.audio_eraser) { window.audio_eraser.currentTime = 0; window.audio_eraser.play(); }
+        }
+    }
+
+    // 2. 2D ÇİZİMLERİ (ÇOKGEN, PERGEL, ÇİZGİ) BAĞIMSIZ SİLME
+    // Tıklama şartı yok, sadece üzerinden geçmek yeterli
+    for (let i = drawnStrokes.length - 1; i >= 0; i--) {
+        const s = drawnStrokes[i];
+        let hit = false;
+
+        // --- ÇOKGENLER (Kenar Hassasiyeti) ---
+        const polyPts = s.points || s.vertices;
+        if (polyPts && polyPts.length > 1) {
+            for (let j = 0; j < polyPts.length; j++) {
+                if (distanceToSegment(pos, polyPts[j], polyPts[(j + 1) % polyPts.length]) < 25) {
+                    hit = true; break;
+                }
+            }
+        }
+        // --- SERBEST ÇİZİMLER (KALEM) ---
+        else if (s.path) {
+            hit = s.path.some(p => distance(pos, p) < 25);
+        }
+        // --- PERGEL VE YAYLAR ---
+        else if (s.type === 'arc' || (s.cx !== undefined && s.radius !== undefined)) {
+            const d = distance(pos, {x: s.cx || s.x, y: s.cy || s.y});
+            if (Math.abs(d - (s.radius || s.r)) < 20 || d < 30) hit = true;
+        }
+        // --- DOĞRU PARÇALARI / IŞINLAR ---
+        else if (s.p1 && s.p2) {
+            if (distanceToSegment(pos, s.p1, s.p2) < 20) hit = true;
+        }
+        // --- MANUEL YAZILAN METİNLER ---
+        else if (!s.points && (s.type === 'text' || s.text)) {
+            if (distance(pos, {x: s.x, y: s.y}) < 45) hit = true;
+        }
+
+        if (hit) {
+            drawnStrokes.splice(i, 1);
+            redrawAllStrokes();
+            if(window.audio_eraser) { window.audio_eraser.currentTime = 0; window.audio_eraser.play(); }
+            break; 
+        }
     }
 });
