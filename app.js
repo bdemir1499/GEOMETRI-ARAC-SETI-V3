@@ -4862,90 +4862,131 @@ document.addEventListener('mouseup', function() {
 });
 
 // =================================================================
-// V128 - HAYALET ÖLÇÜ AVCISI (3D Kalıntılarını Tamamen Siler)
+// V135 - Tam Temizlik (Şekil + Etiket + Ölçü + Bilgi + DOM)
 // =================================================================
 
 canvas.addEventListener('mousemove', (e) => {
     if (!window.isEraserActive) return;
     const pos = getEventPosition(e);
 
-    // 1. 3D ŞEKİL VE ONA AİT ÖLÇÜ KALINTILARINI SİLME
+    // 1. 3D ŞEKİL VE TÜM BİLGİLERİNİ SİLME
     if (window.Scene3D && window.Scene3D.currentMesh) {
-        // Parçalanmayı önlemek için kök grubu bul
-        const root = window.Scene3D.getRootGroup ? window.Scene3D.getRootGroup(window.Scene3D.currentMesh) : window.Scene3D.currentMesh;
-        
-        // 3D merkez izdüşümünü hesapla
+        const root = window.Scene3D.getRootGroup ? 
+            window.Scene3D.getRootGroup(window.Scene3D.currentMesh) : 
+            window.Scene3D.currentMesh;
+
         const meshPos = root.position.clone().project(window.Scene3D.camera);
         const screenPos = {
             x: (meshPos.x + 1) * canvas.width / 2,
             y: -(meshPos.y - 1) * canvas.height / 2
         };
 
-        // Silgi 3D şekle yaklaştıysa (Mesafe: 75 birim)
-        if (distance(pos, screenPos) < 75) {
-            // A) Şekli sahneden kaldır
+        if (distance(pos, screenPos) < 85) {
+            // Mesh kaldır
             window.Scene3D.scene.remove(root);
             window.Scene3D.currentMesh = null;
 
-            // B) KRİTİK TEMİZLİK: Dizideki tüm hayalet ölçü yazılarını sil
-            // Çokgenleri ve çizgileri korumak için tip kontrolü yapıyoruz
+            // 3D info/label temizliği
+            window.Scene3D.currentInfo = null;
+            if (window.Scene3D.currentInfoElement?.remove) {
+                window.Scene3D.currentInfoElement.remove();
+            }
+            window.Scene3D.currentInfoElement = null;
+
+            // 2D preview label temizliği
+            if (previewLabel2D) {
+                previewLabel2D.innerHTML = '';
+                previewLabel2D.style.display = 'none';
+            }
+
+            // drawnStrokes içinden tüm metin/etiketleri temizle
             for (let i = drawnStrokes.length - 1; i >= 0; i--) {
                 const s = drawnStrokes[i];
-                
-                // Etiket (isLabel), Metin (text) veya 3D etiket olarak işaretlenmiş her şeyi sil
-                // Ama noktaları (point) veya çokgenleri (points/vertices) olanları elleme!
-                const isDrawing = s.points || s.vertices || s.path || s.p1;
-                
-                if (!isDrawing && (s.type === 'text' || s.isLabel || s.text !== undefined || s.is3DLabel)) {
+                if (s.type === 'text' || s.label || s.isLabel || s.is3DLabel || s.is3DInfo) {
                     drawnStrokes.splice(i, 1);
                 }
             }
 
-            // C) Sahneyi ve Kanvası güncelle
-            if(window.Scene3D.renderer) window.Scene3D.renderer.render(window.Scene3D.scene, window.Scene3D.camera);
-            redrawAllStrokes(); 
-            if(window.audio_eraser) { window.audio_eraser.currentTime = 0; window.audio_eraser.play(); }
+            // DOM üzerinde duran tüm ölçü etiketlerini temizle
+            const labels = document.querySelectorAll('.preview-3d-label, .shape-label, .measure-label');
+            labels.forEach(el => {
+                el.innerHTML = '';
+                el.style.display = 'none';
+            });
+
+            if (window.Scene3D.renderer) {
+                window.Scene3D.renderer.render(window.Scene3D.scene, window.Scene3D.camera);
+            }
+            redrawAllStrokes();
+
+            if (window.audio_eraser) {
+                window.audio_eraser.currentTime = 0;
+                window.audio_eraser.play();
+            }
         }
     }
 
-    // 2. 2D ÇİZİMLERİ (ÇOKGEN, PERGEL, ÇİZGİ) BAĞIMSIZ SİLME
-    // Tıklama şartı yok, sadece üzerinden geçmek yeterli
+    // 2. 2D NESNELERİ VE ETİKETLERİNİ SİLME
     for (let i = drawnStrokes.length - 1; i >= 0; i--) {
         const s = drawnStrokes[i];
         let hit = false;
 
-        // --- ÇOKGENLER (Kenar Hassasiyeti) ---
-        const polyPts = s.points || s.vertices;
-        if (polyPts && polyPts.length > 1) {
-            for (let j = 0; j < polyPts.length; j++) {
-                if (distanceToSegment(pos, polyPts[j], polyPts[(j + 1) % polyPts.length]) < 25) {
+        // Çokgen
+        const pts = s.points || s.vertices;
+        if (pts && pts.length > 1) {
+            for (let j = 0; j < pts.length; j++) {
+                if (distanceToSegment(pos, pts[j], pts[(j + 1) % pts.length]) < 25) {
                     hit = true; break;
                 }
             }
         }
-        // --- SERBEST ÇİZİMLER (KALEM) ---
-        else if (s.path) {
-            hit = s.path.some(p => distance(pos, p) < 25);
-        }
-        // --- PERGEL VE YAYLAR ---
+        // Pergel / Çember
         else if (s.type === 'arc' || (s.cx !== undefined && s.radius !== undefined)) {
             const d = distance(pos, {x: s.cx || s.x, y: s.cy || s.y});
-            if (Math.abs(d - (s.radius || s.r)) < 20 || d < 30) hit = true;
+            if (Math.abs(d - (s.radius || s.r)) < 25 || d < 35) hit = true;
         }
-        // --- DOĞRU PARÇALARI / IŞINLAR ---
+        // Kalem
+        else if (s.path) {
+            hit = s.path.some((p, idx) => idx % 4 === 0 && distance(pos, p) < 25);
+        }
+        // Çizgi
         else if (s.p1 && s.p2) {
             if (distanceToSegment(pos, s.p1, s.p2) < 20) hit = true;
         }
-        // --- MANUEL YAZILAN METİNLER ---
-        else if (!s.points && (s.type === 'text' || s.text)) {
-            if (distance(pos, {x: s.x, y: s.y}) < 45) hit = true;
+        // Nokta
+        else if (s.type === 'point') {
+            if (distance(pos, s) < 15) hit = true;
+        }
+        // Etiket / Metin
+        else if (s.type === 'text' || s.label || s.isLabel) {
+            if (distance(pos, s) < 30) hit = true;
         }
 
         if (hit) {
+            // Nesneyi sil
             drawnStrokes.splice(i, 1);
+
+            // Ona bağlı tüm label/metinleri de temizle
+            for (let j = drawnStrokes.length - 1; j >= 0; j--) {
+                const t = drawnStrokes[j];
+                if (t.type === 'text' || t.label || t.isLabel || t.is3DLabel || t.is3DInfo) {
+                    drawnStrokes.splice(j, 1);
+                }
+            }
+
+            // DOM üzerindeki etiketleri de temizle
+            const labels = document.querySelectorAll('.preview-3d-label, .shape-label, .measure-label');
+            labels.forEach(el => {
+                el.innerHTML = '';
+                el.style.display = 'none';
+            });
+
             redrawAllStrokes();
-            if(window.audio_eraser) { window.audio_eraser.currentTime = 0; window.audio_eraser.play(); }
-            break; 
+            if (window.audio_eraser) {
+                window.audio_eraser.currentTime = 0;
+                window.audio_eraser.play();
+            }
+            break;
         }
     }
 });
