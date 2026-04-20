@@ -530,6 +530,26 @@ function redrawAllStrokes() {
     }
 }
 
+// Tüm araç butonlarını görsel ve mantıksal olarak sıfırlayan merkezi fonksiyon
+function selectTool(toolName, buttonId) {
+    // 1. Ekrandaki tüm araç butonlarından 'active' sınıfını kaldır
+    document.querySelectorAll('.tool-button, .tool-button-sub').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    // 2. Sadece tıklanan butona 'active' sınıfını ekle
+    const clickedBtn = document.getElementById(buttonId);
+    if (clickedBtn) clickedBtn.classList.add('active');
+
+    // 3. Mantıksal aracı güncelle
+    window.activeTool = toolName;
+
+    // 4. Eğer seçilen araç 'Taşı' değilse, ekranda kalan 3D panelleri temizle
+    if (toolName !== 'move' && toolName !== 'tasi' && toolName !== 'pointer') {
+        document.querySelectorAll('#active-3d-info, #active-3d-panel').forEach(el => el.remove());
+    }
+}
+
 // Yardımcı Fonksiyon: Noktanın doğru parçasına uzaklığı
 function distanceToSegment(p, v1, v2) {
     const l2 = Math.pow(v1.x - v2.x, 2) + Math.pow(v1.y - v2.y, 2);
@@ -4737,12 +4757,25 @@ if (window.Scene3D) {
             html += `Hacim: (4/3)·π·r³ = 4 · ${r3} = ${(4 * r3).toFixed(1)}`;
         }
         else if (d.type.includes('cone') || d.type.includes('koni')) {
-            const L = Math.sqrt(r*r + h*h).toFixed(1);
-            const r2 = (r*r).toFixed(1);
+            const r2 = (r * r).toFixed(1);
+            const L = Math.sqrt(r * r + h * h); // Ana doğru (Slant height)
+            const L2 = (L * L).toFixed(1);
+            
+            // Açınım açısı (alfa) hesaplama: r / L = alfa / 360
+            const alpha = ((r / L) * 360).toFixed(0); 
+            
+            const tabanAlan = (3 * r * r).toFixed(1);
+            const yanalAlan = (3 * L * L * (alpha / 360)).toFixed(1);
+            
             html += `KONİ (π=3)<br><br>`;
-            html += `L = √(${r}² + ${h}²) = ${L}<br><br>`;
-            html += `Alan: π·r·(r+L) = 3 · ${r} · ${(parseFloat(r)+parseFloat(L)).toFixed(1)} = ${(3 * r * (parseFloat(r)+parseFloat(L))).toFixed(1)}<br><br>`;
-            html += `Hacim: (1/3)·π·r²·h = 1 · ${r2} · ${h} = ${(r2 * h).toFixed(1)}`;
+            html += `L = √(${r}² + ${h}²) = ${L.toFixed(1)}<br>`;
+            html += `α (Yan Yüz Açısı) = (${r}/${L.toFixed(1)})·360 = ${alpha}°<br><br>`;
+            
+            html += `Taban Alan (π·r²): 3 · ${r2} = ${tabanAlan}<br>`;
+            html += `Yanal Alan (π·L²·α/360): 3 · ${L2} · (${alpha}/360) = ${yanalAlan}<br><br>`;
+            
+            html += `<b>Toplam Alan:</b> ${tabanAlan} + ${yanalAlan} = <b>${(parseFloat(tabanAlan) + parseFloat(yanalAlan)).toFixed(1)}</b><br><br>`;
+            html += `Hacim (1/3·π·r²·h): 1 · ${r2} · ${h} = <b>${((3 * r * r * h) / 3).toFixed(1)}</b>`;
         }
         else if (d.type.includes('cylinder') || d.type.includes('silindir')) {
             const r2 = (r*r).toFixed(1);
@@ -4750,6 +4783,20 @@ if (window.Scene3D) {
             html += `Alan: 2·π·r² + 2·π·r·h = ${6 * r2} + ${(6 * r * h).toFixed(1)} = ${(6 * r2 + 6 * r * h).toFixed(1)}<br><br>`;
             html += `Hacim: π·r²·h = 3 · ${r2} · ${h} = ${(3 * r2 * h).toFixed(1)}`;
         }
+        // === YENİ PİRAMİT KONTROLÜ BURADA ===
+        else if (d.type.includes('pyramid') || d.type.includes('piramit')) {
+            const s = 2 * r * Math.sin(Math.PI / n); // Kenar uzunluğu
+            const ri = r * Math.cos(Math.PI / n);   // İç yarıçap (apotem)
+            const hs = Math.sqrt(ri * ri + h * h);   // Yan yüz yüksekliği
+            const Ta = (n * s * ri) / 2;             // Taban alanı
+            const Ya = (n * s * hs) / 2;             // Yanal alan
+            
+            html += `${n}GEN PİRAMİT<br><br>`;
+            html += `Taban(Ta)= ${Ta.toFixed(1)} | Yanal(Ya)= ${Ya.toFixed(1)}<br><br>`;
+            html += `Alan: Ta + Ya = ${Ta.toFixed(1)} + ${Ya.toFixed(1)} = <b>${(Ta + Ya).toFixed(1)}</b><br><br>`;
+            html += `Hacim: (Ta·h)/3 = (${Ta.toFixed(1)}·${h})/3 = <b>${((Ta * h) / 3).toFixed(1)}</b>`;
+        }
+        // ===================================
         else {
             html += `${n}GEN PRİZMA<br><br>`;
             const s = 2 * r * Math.sin(Math.PI / n); 
@@ -5086,3 +5133,4 @@ canvas.addEventListener('mousemove', handleEraseEvent);
 canvas.addEventListener('mousedown', handleEraseEvent);
 canvas.addEventListener('touchstart', handleEraseEvent, { passive: false });
 canvas.addEventListener('touchmove', handleEraseEvent, { passive: false });
+
