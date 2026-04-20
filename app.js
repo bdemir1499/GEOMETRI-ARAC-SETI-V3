@@ -4276,12 +4276,30 @@ function clearAllStrokes() {
     if(window.nextPointChar) window.nextPointChar = 'A';
     redrawAllStrokes(); 
 
-    // 3. 3D Şekilleri Temizle (YENİ EKLENEN KISIM)
-    if (window.Scene3D && window.Scene3D.clearScene) {
-        window.Scene3D.clearScene();
+    // 3. 3D ŞEKİLLERİ VE EKRANDAKİ HTML KALINTILARINI KÖKTEN SİL
+    if (window.Scene3D && window.Scene3D.scene) {
+        let objectsToRemove = [];
+        window.Scene3D.scene.children.forEach(child => {
+            // isUnfoldable olan tüm 3D geometrik şekilleri listeye al
+            if (child.userData && child.userData.isUnfoldable) objectsToRemove.push(child);
+        });
+        
+        // Listeye alınanları sahneden sil
+        objectsToRemove.forEach(obj => window.Scene3D.scene.remove(obj));
+        
+        // Hafızadaki son seçili şekilleri sıfırla
+        window.Scene3D.currentMesh = null;
+        window.Scene3D.activeInfoMesh = null;
+        
+        // Ekranda asılı kalan tüm butonları, sarı yazıları ve panelleri zorla yok et!
+        document.querySelectorAll('#active-3d-info, #active-3d-panel, .transform-panel, #measure-label, .shape-info, .preview-3d-label').forEach(el => el.remove());
+        
+        // 3D Kamerayı temizlenmiş haliyle tekrar çiz
+        if (window.Scene3D.renderer) {
+            window.Scene3D.renderer.render(window.Scene3D.scene, window.Scene3D.camera);
+        }
     }
-}
-// --- EKSİK OLAN findHit VE YARDIMCISI (EN ALTA EKLEYİN) ---
+}// --- EKSİK OLAN findHit VE YARDIMCISI (EN ALTA EKLEYİN) ---
 
 function findHit(pos) {
     const SNAP_THRESHOLD = 20; 
