@@ -4707,38 +4707,41 @@ if (window.Scene3D) {
         const r = parseFloat(d.R.toFixed(1));
         const h = parseFloat((d.H || 1).toFixed(1));
         const n = d.sides || 4;
-        let html = `<div style="color:#FFF; font-size:16px; font-weight:bold; border-bottom:1px solid #777; margin-bottom:8px; padding-bottom:4px; text-transform:uppercase;">`;
+        
+        // Sadece SARI yazı ve siyah gölge (kutusuz olması için)
+        let html = `<div style="color:#FFFF00; font-size:16px; font-weight:bold; font-family:monospace; text-shadow: 2px 2px 4px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;">`;
         
         if (d.type.includes('sphere') || d.type.includes('küre')) {
             const r2 = (r*r).toFixed(1);
             const r3 = (r*r*r).toFixed(1);
-            html += `KÜRE (π=3)</div>`;
-            html += `<div style="color:#FFD700;"><b>Alan:</b> 4·π·r²<br>&nbsp;&nbsp;= 4 · 3 · ${r}²<br>&nbsp;&nbsp;= 12 · ${r2}<br>&nbsp;&nbsp;= <b>${(12 * r2).toFixed(1)}</b></div><br>`;
-            html += `<div style="color:#00FFCC;"><b>Hacim:</b> (4/3)·π·r³<br>&nbsp;&nbsp;= (4/3) · 3 · ${r}³<br>&nbsp;&nbsp;= 4 · ${r3}<br>&nbsp;&nbsp;= <b>${(4 * r3).toFixed(1)}</b></div>`;
+            html += `KÜRE (π=3)<br><br>`;
+            html += `Alan: 4·π·r² = 12 · ${r2} = ${(12 * r2).toFixed(1)}<br><br>`;
+            html += `Hacim: (4/3)·π·r³ = 4 · ${r3} = ${(4 * r3).toFixed(1)}`;
         }
         else if (d.type.includes('cone') || d.type.includes('koni')) {
             const L = Math.sqrt(r*r + h*h).toFixed(1);
             const r2 = (r*r).toFixed(1);
-            html += `KONİ (π=3)</div>`;
-            html += `<div style="color:#FFF; font-size:13px;">Ana Doğru (L) = √(${r}² + ${h}²) = ${L}</div><br>`;
-            html += `<div style="color:#FFD700;"><b>Alan:</b> π·r·(r+L)<br>&nbsp;&nbsp;= 3 · ${r} · (${r} + ${L})<br>&nbsp;&nbsp;= ${(3*r).toFixed(1)} · ${(parseFloat(r)+parseFloat(L)).toFixed(1)}<br>&nbsp;&nbsp;= <b>${(3 * r * (parseFloat(r)+parseFloat(L))).toFixed(1)}</b></div><br>`;
-            html += `<div style="color:#00FFCC;"><b>Hacim:</b> (1/3)·π·r²·h<br>&nbsp;&nbsp;= (1/3) · 3 · ${r}² · ${h}<br>&nbsp;&nbsp;= 1 · ${r2} · ${h}<br>&nbsp;&nbsp;= <b>${(r2 * h).toFixed(1)}</b></div>`;
+            html += `KONİ (π=3)<br><br>`;
+            html += `L = √(${r}² + ${h}²) = ${L}<br><br>`;
+            html += `Alan: π·r·(r+L) = 3 · ${r} · ${(parseFloat(r)+parseFloat(L)).toFixed(1)} = ${(3 * r * (parseFloat(r)+parseFloat(L))).toFixed(1)}<br><br>`;
+            html += `Hacim: (1/3)·π·r²·h = 1 · ${r2} · ${h} = ${(r2 * h).toFixed(1)}`;
         }
         else if (d.type.includes('cylinder') || d.type.includes('silindir')) {
             const r2 = (r*r).toFixed(1);
-            html += `SİLİNDİR (π=3)</div>`;
-            html += `<div style="color:#FFD700;"><b>Alan:</b> 2·π·r² + 2·π·r·h<br>&nbsp;&nbsp;= 2·3·${r}² + 2·3·${r}·${h}<br>&nbsp;&nbsp;= ${6 * r2} + ${(6 * r * h).toFixed(1)}<br>&nbsp;&nbsp;= <b>${(6 * r2 + 6 * r * h).toFixed(1)}</b></div><br>`;
-            html += `<div style="color:#00FFCC;"><b>Hacim:</b> π·r²·h<br>&nbsp;&nbsp;= 3 · ${r}² · ${h}<br>&nbsp;&nbsp;= 3 · ${r2} · ${h}<br>&nbsp;&nbsp;= <b>${(3 * r2 * h).toFixed(1)}</b></div>`;
+            html += `SİLİNDİR (π=3)<br><br>`;
+            html += `Alan: 2·π·r² + 2·π·r·h = ${6 * r2} + ${(6 * r * h).toFixed(1)} = ${(6 * r2 + 6 * r * h).toFixed(1)}<br><br>`;
+            html += `Hacim: π·r²·h = 3 · ${r2} · ${h} = ${(3 * r2 * h).toFixed(1)}`;
         }
         else {
-            html += `${n}GEN PRİZMA</div>`;
+            html += `${n}GEN PRİZMA<br><br>`;
             const s = 2 * r * Math.sin(Math.PI / n); 
             const B = (n * s * s) / (4 * Math.tan(Math.PI / n)); 
             const sideArea = n * s * h;
-            html += `<div style="color:#FFF; font-size:13px;">Taban Alanı(Ta) = ${B.toFixed(1)}<br>Yanal Alan(Ya) = n·a·h = ${sideArea.toFixed(1)}</div><br>`;
-            html += `<div style="color:#FFD700;"><b>Alan:</b> 2·Ta + Ya<br>&nbsp;&nbsp;= 2 · ${B.toFixed(1)} + ${sideArea.toFixed(1)}<br>&nbsp;&nbsp;= <b>${(2*B + sideArea).toFixed(1)}</b></div><br>`;
-            html += `<div style="color:#00FFCC;"><b>Hacim:</b> Ta·h<br>&nbsp;&nbsp;= ${B.toFixed(1)} · ${h}<br>&nbsp;&nbsp;= <b>${(B * h).toFixed(1)}</b></div>`;
+            html += `Taban(Ta)= ${B.toFixed(1)} | Yanal(Ya)= ${sideArea.toFixed(1)}<br><br>`;
+            html += `Alan: 2·Ta + Ya = ${(2*B + sideArea).toFixed(1)}<br><br>`;
+            html += `Hacim: Ta·h = ${(B * h).toFixed(1)}`;
         }
+        html += `</div>`;
         return html;
     };
 
@@ -4748,13 +4751,7 @@ if (window.Scene3D) {
         const infoDiv = document.createElement('div');
         infoDiv.id = 'active-3d-info';
         infoDiv.style.position = 'absolute';
-        infoDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
-        infoDiv.style.padding = '15px';
-        infoDiv.style.borderRadius = '10px';
-        infoDiv.style.boxShadow = '0px 0px 10px rgba(0,0,0,0.5)';
-        infoDiv.style.fontFamily = 'monospace, Arial, sans-serif';
-        infoDiv.style.fontSize = '14px';
-        infoDiv.style.lineHeight = '1.4';
+        infoDiv.style.background = 'transparent'; // ARKA PLAN KUTUSU KALDIRILDI
         infoDiv.style.pointerEvents = 'none'; 
         infoDiv.style.zIndex = '1000';
         infoDiv.innerHTML = window.Scene3D.getDetailedFormula(mesh);
@@ -4764,22 +4761,110 @@ if (window.Scene3D) {
         panel.id = 'active-3d-panel';
         panel.style.position = 'absolute';
         panel.style.display = 'flex';
-        panel.style.gap = '8px';
+        panel.style.gap = '15px'; // Çokgenlerdeki gibi araları açıldı
         panel.style.zIndex = '1001';
 
-        const btnRotate = document.createElement('button');
-        btnRotate.innerText = 'Döndür';
-        btnRotate.style.cssText = 'padding:6px 12px; cursor:pointer; background:#333; color:#fff; border:1px solid #666; border-radius:5px; font-weight:bold;';
-        btnRotate.onclick = () => { mesh.rotation.y += Math.PI / 6; if(window.Scene3D.renderer) window.Scene3D.renderer.render(window.Scene3D.scene, window.Scene3D.camera); };
+        // --- PEMBE DÖNDÜRME KULPU (Yuvarlak, Tut-Çek) ---
+        const btnRotate = document.createElement('div');
+        btnRotate.innerHTML = "↻";
+        btnRotate.style.cssText = 'width:36px; height:36px; cursor:grab; background:#ff66b2; color:#fff; border:2px solid #fff; border-radius:50%; font-weight:bold; font-size:20px; display:flex; justify-content:center; align-items:center; box-shadow: 1px 1px 5px rgba(0,0,0,0.8); user-select:none; touch-action:none;';
         
-        const btnResize = document.createElement('button');
-        btnResize.innerText = 'Büyüt';
-        btnResize.style.cssText = 'padding:6px 12px; cursor:pointer; background:#333; color:#fff; border:1px solid #666; border-radius:5px; font-weight:bold;';
-        btnResize.onclick = () => { mesh.scale.multiplyScalar(1.2); if(window.Scene3D.renderer) window.Scene3D.renderer.render(window.Scene3D.scene, window.Scene3D.camera); };
+        // --- YEŞİL BÜYÜTME KULPU (Yuvarlak, Tut-Çek) ---
+        const btnResize = document.createElement('div');
+        btnResize.innerHTML = "⤡";
+        btnResize.style.cssText = 'width:36px; height:36px; cursor:nwse-resize; background:#00cc66; color:#fff; border:2px solid #fff; border-radius:50%; font-weight:bold; font-size:20px; display:flex; justify-content:center; align-items:center; box-shadow: 1px 1px 5px rgba(0,0,0,0.8); user-select:none; touch-action:none;';
         
-        panel.appendChild(btnRotate); panel.appendChild(btnResize); document.body.appendChild(panel);
+        panel.appendChild(btnRotate); 
+        panel.appendChild(btnResize); 
+        document.body.appendChild(panel);
 
         window.Scene3D.activeInfoMesh = mesh;
+
+        // === GERÇEK ZAMANLI TUT-SÜRÜKLE (DRAG) VE HESAPLAMA MANTIĞI ===
+        let isDraggingRot = false, isDraggingRes = false;
+        let startX = 0, startY = 0;
+        let startMeshRotX = 0, startMeshRotY = 0, startScale = 1;
+        let baseR = 0, baseH = 0;
+
+        function onPointerDownRot(e) {
+            e.stopPropagation();
+            if (e.cancelable) e.preventDefault();
+            isDraggingRot = true;
+            startX = e.clientX || (e.touches && e.touches[0].clientX);
+            startY = e.clientY || (e.touches && e.touches[0].clientY);
+            startMeshRotX = mesh.rotation.x;
+            startMeshRotY = mesh.rotation.y;
+            btnRotate.style.cursor = 'grabbing';
+            document.addEventListener('mousemove', onPointerMove);
+            document.addEventListener('mouseup', onPointerUp);
+            document.addEventListener('touchmove', onPointerMove, {passive: false});
+            document.addEventListener('touchend', onPointerUp);
+        }
+
+        function onPointerDownRes(e) {
+            e.stopPropagation();
+            if (e.cancelable) e.preventDefault();
+            isDraggingRes = true;
+            startY = e.clientY || (e.touches && e.touches[0].clientY);
+            startScale = mesh.scale.x || 1;
+            
+            // Matematiksel oranları bozmamak için şeklin gerçek baz ölçülerini alıyoruz
+            baseR = mesh.userData.R / startScale;
+            baseH = (mesh.userData.H || 1) / startScale;
+            
+            document.addEventListener('mousemove', onPointerMove);
+            document.addEventListener('mouseup', onPointerUp);
+            document.addEventListener('touchmove', onPointerMove, {passive: false});
+            document.addEventListener('touchend', onPointerUp);
+        }
+
+        function onPointerMove(e) {
+            if (isDraggingRot) {
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                const deltaX = clientX - startX;
+                const deltaY = clientY - startY;
+                
+                // Fareyi sağa/sola çektikçe Y ekseninde, yukarı/aşağı çektikçe X ekseninde (takla) 3 Boyutlu dönüş yapar
+                mesh.rotation.y = startMeshRotY + (deltaX * 0.015); 
+                mesh.rotation.x = startMeshRotX + (deltaY * 0.015); 
+                
+                if (window.Scene3D.renderer) window.Scene3D.renderer.render(window.Scene3D.scene, window.Scene3D.camera);
+            }
+            if (isDraggingRes) {
+                if (e.cancelable) e.preventDefault();
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                const deltaY = startY - clientY; 
+                // Fareyi yukarı çektikçe büyür, aşağı çektikçe küçülür
+                let newScale = Math.max(0.1, startScale + (deltaY * 0.01)); 
+                
+                mesh.scale.set(newScale, newScale, newScale);
+                
+                // === EKRANDAKİ FORMÜLLERİ CANLI/GERÇEK ZAMANLI GÜNCELLE ===
+                mesh.userData.R = baseR * newScale;
+                mesh.userData.H = baseH * newScale;
+                infoDiv.innerHTML = window.Scene3D.getDetailedFormula(mesh);
+                
+                if (window.Scene3D.renderer) window.Scene3D.renderer.render(window.Scene3D.scene, window.Scene3D.camera);
+            }
+        }
+
+        function onPointerUp() {
+            isDraggingRot = false;
+            isDraggingRes = false;
+            btnRotate.style.cursor = 'grab';
+            document.removeEventListener('mousemove', onPointerMove);
+            document.removeEventListener('mouseup', onPointerUp);
+            document.removeEventListener('touchmove', onPointerMove);
+            document.removeEventListener('touchend', onPointerUp);
+        }
+
+        // Tıklama ve Dokunmatik Tahta Eylemleri
+        btnRotate.addEventListener('mousedown', onPointerDownRot);
+        btnRotate.addEventListener('touchstart', onPointerDownRot, {passive: false});
+        
+        btnResize.addEventListener('mousedown', onPointerDownRes);
+        btnResize.addEventListener('touchstart', onPointerDownRes, {passive: false});
 
         function updatePos() {
             if (window.Scene3D.activeInfoMesh !== mesh || !mesh.parent) {
@@ -4793,14 +4878,13 @@ if (window.Scene3D) {
             infoDiv.style.left = `${x + 50}px`;
             infoDiv.style.top = `${y - 100}px`;
             panel.style.left = `${x + 50}px`;
-            panel.style.top = `${y + infoDiv.offsetHeight - 90}px`;
+            panel.style.top = `${y + infoDiv.offsetHeight - 40}px`; // Butonlar yazının hemen altında
             
             requestAnimationFrame(updatePos);
         }
         updatePos();
     };
 }
-
 // -----------------------------------------------------------------
 // 3. 3D TIKLAMA YAKALAYICI (2D ÇOKGENLERİ BOZMAZ!)
 // -----------------------------------------------------------------
@@ -4972,7 +5056,6 @@ function handleEraseEvent(e) {
             
             // 2D silinirken de DOM kalıntılarını temizle
             document.querySelectorAll('#active-3d-info, #active-3d-panel, .transform-panel, #measure-label, .preview-3d-label').forEach(el => el.remove());
-
             if (typeof redrawAllStrokes === 'function') redrawAllStrokes();
             if (window.audio_eraser) { window.audio_eraser.currentTime = 0; window.audio_eraser.play(); }
             break;
