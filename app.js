@@ -1,11 +1,49 @@
-// --- app.js (TAM DÜZELTİLMİŞ SÜRÜM) ---
+// =================================================================
+// KESİN SES SUSTURUCU (NUCLEAR MUTE) - EN ÜSTTE OLMALI
+// =================================================================
+window.Audio = class {
+    constructor() {
+        this.play = () => Promise.resolve();
+        this.pause = () => {};
+        this.load = () => {};
+        this.addEventListener = () => {};
+        this.removeEventListener = () => {};
+        this.currentTime = 0;
+        this.volume = 0;
+        this.muted = true;
+        this.src = "";
+    }
+};
 
-// --- SESLER ---
-window.audio_click = new Audio('sesler/point-smooth-beep-230573.mp3');
-let audio_click_src_set = false; 
-window.audio_undo = new Audio('sesler/080918_bolt-sliding-back-4-39863 (3).mp3');
-window.audio_draw = new Audio('sesler/drawing-a-line-69277.mp3'); 
-window.audio_eraser = new Audio('sesler/pencil-eraser-107852.mp3');
+// Mevcut tüm ses nesnelerini geçersiz kıl
+const muteAll = () => {
+    const silent = { play: () => Promise.resolve(), pause: () => {}, stop: () => {}, volume: 0 };
+    window.audio_click = silent;
+    window.audio_undo = silent;
+    window.audio_draw = silent;
+    window.audio_eraser = silent;
+    window.audio_clear = silent;
+};
+muteAll();
+// =================================================================
+
+
+// --- SESLER (TAMAMEN SUSTURULDU) ---
+const silentAudio = { 
+    play: function() { return Promise.resolve(); }, 
+    pause: function() {}, 
+    currentTime: 0, 
+    load: function() {} 
+};
+
+window.audio_click = silentAudio;
+window.audio_undo = silentAudio;
+window.audio_draw = silentAudio;
+window.audio_eraser = silentAudio;
+window.audio_clear = silentAudio; // Eğer varsa bu da sussun
+
+let audio_click_src_set = true; // Hata vermemesi için true kalsın
+
 
 // --- KANVAS AYARLARI ---
 const canvas = document.getElementById('drawing-canvas');
@@ -276,7 +314,7 @@ function redrawAllStrokes() {
                     ctx.drawImage(stroke.img, -stroke.width / 2, -stroke.height / 2, stroke.width, stroke.height);
 
                     // Seçiliyse Çerçeve Çiz
-                    if (currentTool === 'move' && selectedItem === stroke) {
+                    if (selectedItem === stroke) {
                         ctx.strokeStyle = '#00FFCC';
                         ctx.lineWidth = 2;
                         ctx.setLineDash([5, 5]);
@@ -289,6 +327,32 @@ function redrawAllStrokes() {
                         ctx.fillStyle = '#FF00FF';
                         ctx.fill();
                         ctx.stroke();
+// ▼▼▼ YENİ: MAVİ DÖNDÜRME KULBU ▼▼▼
+                        const rotY = -stroke.height / 2 - 30; 
+
+                        // Bağlantı çizgisi
+                        ctx.beginPath();
+                        ctx.moveTo(0, -stroke.height / 2);
+                        ctx.lineTo(0, rotY);
+                        ctx.strokeStyle = '#2196F3';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+
+                        // Mavi Daire
+                        ctx.beginPath();
+                        ctx.arc(0, rotY, 12, 0, 2 * Math.PI);
+                        ctx.fillStyle = '#2196F3';
+                        ctx.fill();
+                        ctx.strokeStyle = '#FFFFFF';
+                        ctx.stroke();
+
+                        // Sembol
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.font = '14px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('🔄', 0, rotY);
+                        // ▲▲▲ YENİ KISIM BİTİŞİ ▲▲▲
                     }
                     ctx.restore();
                 }
@@ -954,32 +1018,27 @@ lineColorOptions.forEach(box => {
 lineColorOptions[0].classList.add('selected');
 window.currentLineColor = lineColorOptions[0].dataset.color || lineColorOptions[0].style.backgroundColor; 
 
-// --- app.js: Canlandır Butonu (Dokunmatik ve Tıklama GARANTİLİ) ---
+// --- app.js: Canlandır Butonu (SADECE MOD DEĞİŞTİRİR) ---
 if (animateButton) {
     const toggleAnimate = (e) => {
-        // Dokunmatik ekranlarda çift tetiklenmeyi ve diğer araçların araya girmesini önle
+        // Dokunmatik ekranlarda çift tetiklenmeyi önle
         if (e && e.cancelable) e.preventDefault(); 
         if (e) e.stopPropagation(); 
 
-        // Modu Değiştir
+        // Modu Değiştir (Aç / Kapat)
         setActiveTool(currentTool === 'snapshot' ? 'none' : 'snapshot');
         
-        // Görsel Ayarlar (Aktiflik Rengi ve İmleç)
-        if (currentTool === 'snapshot') {
-            animateButton.classList.add('active');
-            body.classList.add('cursor-snapshot'); 
-        } else {
-            animateButton.classList.remove('active');
-            body.classList.remove('cursor-snapshot');
-        }
-    };
+        // Araç değiştiğinde eski seçimleri temizle
+        selectedItem = null;
+        if (typeof redrawAllStrokes === 'function') redrawAllStrokes();
+    }; 
 
-    // 1. Standart Tıklama (Mouse için)
+    // Olay dinleyicilerini bağla
     animateButton.addEventListener('click', toggleAnimate);
-    
-    // 2. Parmak Dokunuşu (Akıllı Tahta için ŞART olan kısım)
     animateButton.addEventListener('touchstart', toggleAnimate, { passive: false });
 }
+
+
 
 // --- 3D ŞEKİLLER MENÜ MANTIĞI ---
 
@@ -1164,6 +1223,44 @@ canvas.addEventListener('mousedown', (e) => {
         currentTool === 'draw_circle'
     );
 
+// ▼▼▼ CANLANDIR MODUNDA RESME TIKLAMA VE TUTMA ▼▼▼
+    if (currentTool === 'snapshot') {
+        const pos = getEventPosition(e);
+        
+        // GÜVENLİK 1: Eğer tıklanan şey Canvas tahtası değil de bir HTML butonuysa, tıklamayı çalma!
+        if (e.target && e.target.tagName !== 'CANVAS') return;
+
+        if (selectedItem && selectedItem.type === 'image') {
+            const dx = pos.x - selectedItem.x;
+            const dy = pos.y - selectedItem.y;
+            
+            // 1. TAM RESMİN İÇİNE (GÖVDESİNE) TIKLANDIYSA -> Taşıma başlat
+            if (Math.abs(dx) <= selectedItem.width / 2 && Math.abs(dy) <= selectedItem.height / 2) {
+                isMoving = true;
+                dragStartPos = pos;
+                originalStartPos = { x: selectedItem.x, y: selectedItem.y };
+                return; // Taşıma başladı, aşağıya inme
+            }
+            
+            // 2. RESMİN ETRAFINDAKİ BUTONLARA TIKLANDIYSA (Genişlik + 50px Tolerans Alanı)
+            if (Math.abs(dx) <= selectedItem.width / 2 + 50 && Math.abs(dy) <= selectedItem.height / 2 + 50) {
+                // DİKKAT: Burada bilerek hiçbir şey yapmıyoruz ve 'return' DEMİYORUZ! 
+                // Böylece kod aşağıya inmeye devam edip senin Döndürme/Boyutlandırma olaylarını bulup çalıştırabilecek.
+            } 
+            // 3. TAMAMEN UZAK BİR BOŞLUĞA TIKLANDIYSA -> Eski resmi bırak, yeni seçim başlat
+            else {
+                selectedItem = null;
+                if (typeof redrawAllStrokes === 'function') redrawAllStrokes();
+                snapshotStart = snapTarget ? snapTarget : pos;
+                return;
+            }
+        } else {
+            // Ekranda seçili resim yoksa direkt yeni kopyalama başlat
+            snapshotStart = snapTarget ? snapTarget : pos;
+            return;
+        }
+    }
+    // ▲▲▲ ▲▲▲ ▲▲▲
     // 2. Silgiye özel komutu listenin DIŞINA ve ALTINA yaz
     if (currentTool === 'eraser') {
         isDrawing = true; // Sürükleme başlasın
@@ -1197,93 +1294,85 @@ canvas.addEventListener('mousedown', (e) => {
         return; 
     }
 
-    // 3. "TAŞI" (MOVE) MODU
-    if (currentTool === 'move') {
+    // 3. "TAŞI" VEYA "CANLANDIR" MODUNDA RESİM SEÇİM/SÜRÜKLEME
+    if (currentTool === 'move' || currentTool === 'snapshot') {
         const pos = getEventPosition(e);
         
-        // 3D Sahneye ileti (Döndürme/Boyutlandırma için)
+        // 3D Sahne Kontrolü
         if (window.Scene3D) {
             const is3DHandle = window.Scene3D.onDown(pos.x, pos.y);
             if (is3DHandle) return; 
         }
 
+        // --- 1. MAVİ DÖNDÜRME BUTONUNA TIKLANDI MI? ---
+        if (selectedItem && selectedItem.type === 'image') {
+            const angleRad = (selectedItem.rotation || 0) * Math.PI / 180;
+            const handleY = -selectedItem.height / 2 - 30; 
+            const rotX = selectedItem.x - handleY * Math.sin(angleRad);
+            const rotY = selectedItem.y + handleY * Math.cos(angleRad);
+            
+            if (Math.hypot(pos.x - rotX, pos.y - rotY) < 15) {
+                window.isRotatingImageOnly = true; 
+                if (e.preventDefault) e.preventDefault();
+                return; // Döndürme başladı, aşağı inmesini KES
+            }
+        }
+
+        // --- 2. RESME VEYA PEMBE BUTONA TIKLANDI MI? ---
         const hit = findHit(pos);
         if (hit) {
-            // 3D Nesne Seçimi
-            if (hit.is3D) {
-                isMoving = true;
-                dragStartPos = pos;
-                selectedItem = { is3D: true }; 
-                selectedPointKey = hit.action; 
-                return;
-            }
-
-            if (hit.pointKey === 'toggle_circle_info') { 
-                hit.item.showCircleInfo = !hit.item.showCircleInfo; 
-                redrawAllStrokes(); 
-                return; 
-            }
-
-            // Toggle İşlemleri
-            if (hit.pointKey === 'toggle_edges') { hit.item.showEdgeLabels = !hit.item.showEdgeLabels; redrawAllStrokes(); return; }
-            if (hit.pointKey === 'toggle_angles') { hit.item.showAngleLabels = !hit.item.showAngleLabels; redrawAllStrokes(); return; }
-            if (hit.pointKey === 'toggle_circle_info') { hit.item.showCircleInfo = !hit.item.showCircleInfo; redrawAllStrokes(); return; }
-
-            // Taşıma Başlat
-            isMoving = true;
-            selectedItem = hit.item;
-            selectedPointKey = hit.pointKey;
-            dragStartPos = pos;
-
-            // Başlangıç Pozisyonunu Kaydet
-            // Başlangıç Pozisyonunu Kaydet (MOUSEDOWN)
-            if (hit.pointKey === 'self') {
-                originalStartPos = { x: hit.item.x, y: hit.item.y };
-            }
-            else if (hit.pointKey === 'p1') {
-                originalStartPos = { x: hit.item.p1.x, y: hit.item.p1.y };
-            }
-            else if (hit.pointKey === 'p2') {
-                originalStartPos = { x: hit.item.p2.x, y: hit.item.p2.y };
-            }
-            else if (hit.pointKey === 'center') {
-                // A) Çember/Yay
-                if (hit.item.type === 'arc' || hit.item.type === 'circle') {
-                    originalStartPos = { x: hit.item.cx, y: hit.item.cy };
-                } 
-                // B) Çokgen
-                else {
-                    originalStartPos = { x: hit.item.center.x, y: hit.item.center.y };
-                }
-            }
-            else if (hit.pointKey === 'rotate' || hit.pointKey === 'resize' || hit.pointKey === 'image_resize') {
-                originalStartPos = { 
-                    radius: hit.item.radius, 
-                    rotation: hit.item.rotation, 
-                    width: hit.item.width, 
-                    height: hit.item.height 
-                };
-            }
-
-            // Pivot ve Diğer Ayarlar
-            const itemType = hit.item.type;
-            if ((itemType === 'line' || itemType === 'segment' || itemType === 'ray' || itemType === 'straightLine') && (hit.pointKey === 'p1' || hit.pointKey === 'p2')) {
-                rotationPivot = (hit.pointKey === 'p1') ? hit.item.p2 : hit.item.p1;
-                const movingPoint = (hit.pointKey === 'p1') ? hit.item.p1 : hit.item.p2;
-                selectedItem.startRadius = distance(movingPoint, rotationPivot);
+            // Eğer "Canlandır" modundaysak sadece resimlere müdahale etmesine izin ver.
+            if (currentTool === 'snapshot' && hit.item.type !== 'image') {
+                // Başka bir şekle tıklandıysa yoksay ki arka planda yeni seçim çizebilsin
             } else {
-                rotationPivot = null;
+                // Resmi tuttu! Taşıma başlıyor.
+                isMoving = true;
+                selectedItem = hit.item;
+                selectedPointKey = hit.pointKey;
+                dragStartPos = pos;
+
+                // Başlangıç Pozisyonunu Kaydet
+                if (hit.pointKey === 'self') originalStartPos = { x: hit.item.x, y: hit.item.y };
+                else if (hit.pointKey === 'p1') originalStartPos = { x: hit.item.p1.x, y: hit.item.p1.y };
+                else if (hit.pointKey === 'p2') originalStartPos = { x: hit.item.p2.x, y: hit.item.p2.y };
+                else if (hit.pointKey === 'center') {
+                    if (hit.item.type === 'arc' || hit.item.type === 'circle') originalStartPos = { x: hit.item.cx, y: hit.item.cy };
+                    else originalStartPos = { x: hit.item.center.x, y: hit.item.center.y };
+                } else if (hit.pointKey === 'rotate' || hit.pointKey === 'resize' || hit.pointKey === 'image_resize') {
+                    originalStartPos = { radius: hit.item.radius, rotation: hit.item.rotation, width: hit.item.width, height: hit.item.height };
+                }
+
+                // Döndürme Pivot Kontrolleri
+                const itemType = hit.item.type;
+                if ((itemType === 'line' || itemType === 'segment' || itemType === 'ray' || itemType === 'straightLine') && (hit.pointKey === 'p1' || hit.pointKey === 'p2')) {
+                    rotationPivot = (hit.pointKey === 'p1') ? hit.item.p2 : hit.item.p1;
+                    const movingPoint = (hit.pointKey === 'p1') ? hit.item.p1 : hit.item.p2;
+                    selectedItem.startRadius = distance(movingPoint, rotationPivot);
+                } else {
+                    rotationPivot = null;
+                }
+                
+                redrawAllStrokes();
+                return; // Resim tutuldu, yeni dikdörtgen çizmesini KES!
             }
-            
-            redrawAllStrokes();
-            return;
-        } else {
-            // Boşa tıklandıysa seçimi kaldır ve taşıma modundan çık
-            isMoving = false; // FIX: taşıma bayrağını sıfırla
+        } 
+        
+        // --- 3. BOŞLUĞA TIKLANDI ---
+        if (currentTool === 'move') {
+            isMoving = false;
             selectedItem = null;
             redrawAllStrokes();
+            return;
+        } else if (currentTool === 'snapshot') {
+            if (selectedItem) {
+                // Seçimi temizle ve butonları gizle
+                selectedItem = null;
+                redrawAllStrokes();
+                // BURADA BİLEREK RETURN KULLANMIYORUZ!
+                // Böylece kod aşağı inmeye devam eder ve doğrudan yeni bir 'snapshotStart' dikdörtgeni çizmene olanak tanır.
+            }
         }
-    }                
+    }
 
     // 4. ÇİZİM ARAÇLARI
     if (currentTool === 'none') return;
@@ -1291,33 +1380,38 @@ canvas.addEventListener('mousedown', (e) => {
 
     // Canlandırma Başlangıcı
     if (currentTool === 'snapshot') {
-        snapshotStart = snapPos;
-        return;
-    }
+        const pos = getEventPosition(e);
+        
+        if (selectedItem && selectedItem.type === 'image') {
+            const dx = pos.x - selectedItem.x;
+            const dy = pos.y - selectedItem.y;
+            
+            // 1. Mavi Döndürme Butonu Kontrolü
+            const angleRad = (selectedItem.rotation || 0) * Math.PI / 180;
+            const handleY = -selectedItem.height / 2 - 30;
+            const rotX = selectedItem.x - handleY * Math.sin(-angleRad);
+            const rotY = selectedItem.y + handleY * Math.cos(-angleRad);
+            
+            if (Math.hypot(pos.x - rotX, pos.y - rotY) < 20) {
+                window.isRotatingImageOnly = true;
+                if (e.preventDefault) e.preventDefault();
+                return;
+            }
 
-    // Çokgen / Çember Başlangıcı
-    if (currentTool.startsWith('draw_polygon_') || currentTool === 'draw_circle') {
-        let type = 0;
-        const parts = currentTool.split('_');
-        if (parts.length > 2 && !isNaN(parseInt(parts[2]))) {
-            type = parseInt(parts[2]);
+            // 2. Resmin Kendisini Tutma (Arka arkaya sürüklemek için toleranslı)
+            if (Math.abs(dx) <= (selectedItem.width / 2) + 15 && Math.abs(dy) <= (selectedItem.height / 2) + 15) {
+                isMoving = true;
+                dragStartPos = pos;
+                originalStartPos = { x: selectedItem.x, y: selectedItem.y };
+                return;
+            }
         }
         
-        window.tempPolygonData = {
-            type: type,
-            center: snapPos,
-            radius: 0,
-            rotation: 0
-        };
-        
-        if(typeof polygonPreviewLabel !== 'undefined') {
-            polygonPreviewLabel.classList.remove('hidden');
-            polygonPreviewLabel.style.left = `${snapPos.x}px`;
-            polygonPreviewLabel.style.top = `${snapPos.y - 40}px`;
-            polygonPreviewLabel.innerText = "Merkez";
-        }
-        redrawAllStrokes(); 
-        return; 
+        // 3. Resmin Dışına Tıklandıysa: Seçimi bırak, yeni dikdörtgen başlat
+        selectedItem = null;
+        redrawAllStrokes();
+        snapshotStart = snapPos || pos; 
+        return;
     }
 
     // Diğer Araçlar
@@ -1368,27 +1462,47 @@ window.tempPolygonData = null;
 });
 
 
-// --- FARE HAREKETİ (MOUSEMOVE) - TAMİR EDİLMİŞ SÜRÜM ---
+// --- FARE HAREKETİ (MOUSEMOVE) - TAMİR EDİLMİŞ VE SÜRÜKLEME EKLENMİŞ SÜRÜM ---
 canvas.addEventListener('mousemove', (e) => {
     const pos = getEventPosition(e);
 
-// --- CANLANDIRMA (SNAPSHOT) KUTUCUĞU ÖNİZLEMESİ ---
+    // ▼▼▼ YENİ: CANLANDIR MODUNDA SÜRÜKLEME MOTORU ▼▼▼
+    if (currentTool === 'snapshot' && isMoving && selectedItem && selectedItem.type === 'image') {
+        const dx = pos.x - dragStartPos.x;
+        const dy = pos.y - dragStartPos.y;
+        selectedItem.x = originalStartPos.x + dx;
+        selectedItem.y = originalStartPos.y + dy;
+        redrawAllStrokes();
+        return; // İşlem bitti, aşağıya inme
+    }
+    // ▲▲▲ ▲▲▲ ▲▲▲
+
+    // ▼▼▼ 3. ADIM: DÖNDÜRME ANİMASYONU ▼▼▼
+    if (window.isRotatingImageOnly && selectedItem && selectedItem.type === 'image') {
+        const dx = pos.x - selectedItem.x;
+        const dy = pos.y - selectedItem.y;
+        let angle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
+        selectedItem.rotation = angle;
+        redrawAllStrokes();
+        return; 
+    }
+
+    // --- CANLANDIRMA (SNAPSHOT) KUTUCUĞU ÖNİZLEMESİ ---
+    // (Sadece bir resim sürüklenmiyorsa kutu çiz)
     if (currentTool === 'snapshot' && typeof snapshotStart !== 'undefined' && snapshotStart) {
-        redrawAllStrokes(); // Önce arka planı (PDF/Resim) tekrar çiz
-        
+        redrawAllStrokes(); 
         const w = pos.x - snapshotStart.x;
         const h = pos.y - snapshotStart.y;
-
         ctx.save();
-        ctx.setLineDash([5, 5]); // Kesik çizgi
-        ctx.strokeStyle = '#FF0000'; // Kırmızı renk
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = '#FF0000'; 
         ctx.lineWidth = 2;
         ctx.strokeRect(snapshotStart.x, snapshotStart.y, w, h);
         ctx.restore();
-        return; // Diğer çizim işlemlerini engelle
+        return; 
     }
 
-// --- SİLGİ İMLECİNİ HAREKET ETTİR ---
+    // --- SİLGİ İMLECİNİ HAREKET ETTİR ---
     if (currentTool === 'eraser' && typeof eraserPreview !== 'undefined') {
         eraserPreview.style.left = `${pos.x}px`;
         eraserPreview.style.top = `${pos.y}px`;
@@ -1410,15 +1524,14 @@ canvas.addEventListener('mousemove', (e) => {
         }
     }
 
-    // 2. TAŞIMA (MOVE) ARACI
+    // 2. TAŞI (MOVE) ARACI
     if (currentTool === 'move' && isMoving && selectedItem) {
         const dx = pos.x - dragStartPos.x;
         const dy = pos.y - dragStartPos.y;
         
         if (selectedItem.is3D) {
-            // 3D taşıma Scene3D içinde hallediliyor
+            // 3D taşıma Scene3D içinde
         } else {
-            // 2D Nesne Taşıma
             if (selectedPointKey === 'image_resize') {
                 const distFromCenterX = Math.abs(pos.x - selectedItem.x);
                 const distFromCenterY = Math.abs(pos.y - selectedItem.y);
@@ -1456,58 +1569,48 @@ canvas.addEventListener('mousemove', (e) => {
             } 
             else {
                 if (selectedPointKey === 'self') {
-                selectedItem.x = originalStartPos.x + dx;
-                selectedItem.y = originalStartPos.y + dy;
-            } else if (selectedPointKey === 'p1') {
-                selectedItem.p1.x = originalStartPos.x + dx;
-                selectedItem.p1.y = originalStartPos.y + dy;
-            } else if (selectedPointKey === 'p2') {
-                selectedItem.p2.x = originalStartPos.x + dx;
-                selectedItem.p2.y = originalStartPos.y + dy;
-            } else if (selectedPointKey === 'center') {
-                // A) ÇEMBER (Arc / Circle) Taşıma
-                if (selectedItem.type === 'arc') {
-                    selectedItem.cx = originalStartPos.x + dx;
-                    selectedItem.cy = originalStartPos.y + dy;
-                }
-                // B) ÇOKGEN (Polygon) Taşıma
-                else if (selectedItem.type === 'polygon') {
-                    selectedItem.center.x = originalStartPos.x + dx;
-                    selectedItem.center.y = originalStartPos.y + dy;
-                    // Köşeleri de güncelle
-                    if(window.PolygonTool && window.PolygonTool.updateVertices) {
-                        window.PolygonTool.updateVertices(selectedItem);
+                    selectedItem.x = originalStartPos.x + dx;
+                    selectedItem.y = originalStartPos.y + dy;
+                } else if (selectedPointKey === 'p1') {
+                    selectedItem.p1.x = originalStartPos.x + dx;
+                    selectedItem.p1.y = originalStartPos.y + dy;
+                } else if (selectedPointKey === 'p2') {
+                    selectedItem.p2.x = originalStartPos.x + dx;
+                    selectedItem.p2.y = originalStartPos.y + dy;
+                } else if (selectedPointKey === 'center') {
+                    if (selectedItem.type === 'arc') {
+                        selectedItem.cx = originalStartPos.x + dx;
+                        selectedItem.cy = originalStartPos.y + dy;
+                    }
+                    else if (selectedItem.type === 'polygon') {
+                        selectedItem.center.x = originalStartPos.x + dx;
+                        selectedItem.center.y = originalStartPos.y + dy;
+                        if(window.PolygonTool && window.PolygonTool.updateVertices) {
+                            window.PolygonTool.updateVertices(selectedItem);
+                        }
                     }
                 }
-            }
             }
         }
         redrawAllStrokes();
         return; 
     }
 
-// --- KRİTİK DÜZELTME: KALEMİ EN BAŞA ALDIK ---
+    // --- KALEM VE ÇİZİM MANTIKLARI ---
     if (isDrawing && currentTool === 'pen') {
         if (drawnStrokes.length > 0) {
             const currentStroke = drawnStrokes[drawnStrokes.length - 1];
-            // Path dizisi var mı kontrol et, yoksa oluştur
             if (!currentStroke.path) currentStroke.path = [];
-            
             currentStroke.path.push(pos);
-            
-            // Performans için sadece yeni parçayı çiz (isteğe bağlı) veya hepsini yenile
             redrawAllStrokes(); 
         }
-        return; // Kalem aktifse aşağıdaki önizleme kodlarını çalıştırma
+        return;
     }
-    // --- KALEM BİTİŞ ---
-
 
     // 3. FİZİKSEL ARAÇ VE SNAP KONTROLÜ
     const isToolElementClicked = e.target.closest('.ruler-container, .gonye-container, .aciolcer-container, #compass-container');
     if (isToolElementClicked) return;
 
-    // Akıllı Yakalama
     clearTimeout(snapHoverTimer); snapHoverTimer = null;
     const canSnap = (currentTool === 'point' || currentTool === 'straightLine' || currentTool === 'pen' || currentTool === 'segment');
     
@@ -1532,102 +1635,70 @@ canvas.addEventListener('mousemove', (e) => {
     }
 
     // --- 4. ŞEKİL VE ÇİZİM ÖNİZLEMELERİ ---
-    let previewActive = false;
     const drawEndPos = snapTarget || pos;
-// ---------------------------------------------------------
-    // EKSİK OLAN ÇİZİM MANTIKLARI BURAYA EKLENDİ
-    // ---------------------------------------------------------
 
-    // A) Düz Çizgi
-    // A) Düz Çizgi
     if (currentTool === 'straightLine' && isDrawingLine) {
         redrawAllStrokes(); 
-        
         ctx.save(); 
         ctx.setLineDash([10, 5]); 
         ctx.globalAlpha = 0.6;    
-
         ctx.beginPath(); 
         ctx.moveTo(lineStartPoint.x, lineStartPoint.y); 
         ctx.lineTo(drawEndPos.x, drawEndPos.y);
         ctx.strokeStyle = currentLineColor; 
         ctx.lineWidth = 3; 
         ctx.stroke();
-        
         ctx.restore(); 
-
         drawDot(lineStartPoint, currentLineColor); 
         drawDot(drawEndPos, currentLineColor);
-
-        // ▼▼▼ ETİKET GÜNCELLEME ▼▼▼
         const dist = distance(lineStartPoint, drawEndPos);
         const cmVal = (dist / 30).toFixed(1).replace('.', ',');
         previewLabel2D.innerText = `${cmVal} cm`;
         previewLabel2D.style.display = 'block';
         previewLabel2D.style.left = (drawEndPos.x + 15) + 'px';
         previewLabel2D.style.top = (drawEndPos.y - 25) + 'px';
-        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
     }
-    // B) Doğru (Sonsuz)
     else if (currentTool === 'line' && isDrawingInfinityLine) {
         redrawAllStrokes();
-        
         ctx.save(); 
         ctx.setLineDash([10, 5]); 
         ctx.globalAlpha = 0.6;
-
         drawInfinityLine(lineStartPoint, drawEndPos, currentLineColor, 3, false);
-        
         ctx.restore();
-
         drawDot(lineStartPoint, currentLineColor); 
         drawDot(drawEndPos, currentLineColor);
     }
-    // C) Doğru Parçası
     else if (currentTool === 'segment' && isDrawingSegment) {
         redrawAllStrokes(); 
-        
         ctx.save(); 
         ctx.setLineDash([10, 5]); 
         ctx.globalAlpha = 0.6;
-
         ctx.beginPath(); 
         ctx.moveTo(lineStartPoint.x, lineStartPoint.y); 
         ctx.lineTo(drawEndPos.x, drawEndPos.y);
         ctx.strokeStyle = currentLineColor; 
         ctx.lineWidth = 3; 
         ctx.stroke();
-        
         ctx.restore();
-
         drawDot(lineStartPoint, currentLineColor); 
         drawDot(drawEndPos, currentLineColor);
-
-        // ▼▼▼ ETİKET GÜNCELLEME ▼▼▼
         const dist = distance(lineStartPoint, drawEndPos);
         const cmVal = (dist / 30).toFixed(1).replace('.', ',');
         previewLabel2D.innerText = `${cmVal} cm`;
         previewLabel2D.style.display = 'block';
         previewLabel2D.style.left = (drawEndPos.x + 15) + 'px';
         previewLabel2D.style.top = (drawEndPos.y - 25) + 'px';
-        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
     }
-    // D) Işın
     else if (currentTool === 'ray' && isDrawingRay) {
         redrawAllStrokes(); 
-        
         ctx.save(); 
         ctx.setLineDash([10, 5]); 
         ctx.globalAlpha = 0.6;
-
         drawInfinityLine(lineStartPoint, drawEndPos, currentLineColor, 3, true); 
-        
         ctx.restore();
-
         drawDot(lineStartPoint, currentLineColor); 
         drawDot(drawEndPos, currentLineColor);
     }
-    // E) Çokgen ve Çember Önizleme
     else if (window.tempPolygonData && window.tempPolygonData.center) {
         const center = window.tempPolygonData.center;
         const type = window.tempPolygonData.type;
@@ -1635,20 +1706,14 @@ canvas.addEventListener('mousemove', (e) => {
         const dx = drawEndPos.x - center.x;
         const dy = drawEndPos.y - center.y;
         const currentRotationDeg = Math.atan2(dy, dx) * (180 / Math.PI);
-
-        // Veriyi güncelle
         window.tempPolygonData.rotation = currentRotationDeg;
         window.tempPolygonData.radius = currentRadius;
-
-        redrawAllStrokes(); // Temizle
-
+        redrawAllStrokes(); 
         ctx.save();
         ctx.beginPath();
-        // Çember
         if (type === 0) {
              ctx.arc(center.x, center.y, currentRadius, 0, 2 * Math.PI);
         } 
-        // Çokgenler
         else if (window.PolygonTool && window.PolygonTool.calculateVertices) {
              const vertices = window.PolygonTool.calculateVertices(center, currentRadius, type, currentRotationDeg);
              if (vertices.length > 0) {
@@ -1664,8 +1729,6 @@ canvas.addEventListener('mousemove', (e) => {
         ctx.stroke();
         drawDot(center, currentLineColor);
         ctx.restore();
-        
-        // Etiket Güncelleme
         if(typeof polygonPreviewLabel !== 'undefined') {
             polygonPreviewLabel.style.left = `${drawEndPos.x}px`;
             polygonPreviewLabel.style.top = `${drawEndPos.y - 50}px`;
@@ -1675,32 +1738,7 @@ canvas.addEventListener('mousemove', (e) => {
             polygonPreviewLabel.innerText = (type === 0) ? `Yarıçap: ${cmRadius} cm` : `Boyut: ${cmRadius} cm`;
         }
     }
-    // F) Kalem (Sürekli Çizim - Mouse)
-    if (typeof isDrawing !== 'undefined' && isDrawing) {
-        
-        // A) SİLGİ
-        if (currentTool === 'eraser') {
-            handleEraser(pos); 
-        }
-        // B) KALEM
-        else if (currentTool === 'pen') {
-            if (drawnStrokes.length > 0) {
-                const currentStroke = drawnStrokes[drawnStrokes.length - 1];
-                
-                // snapPos (varsa) yoksa normal pos kullan
-                const drawPos = (typeof snapPos !== 'undefined' && snapPos) ? snapPos : pos;
-                
-                // Path dizisi güvenliği
-                if (!currentStroke.path) currentStroke.path = [];
-                
-                currentStroke.path.push(drawPos);
-                redrawAllStrokes();
-            }
-        }
-    }
-
 });
-
 
 // --- app.js: TAM VE EKSİKSİZ TOUCHSTART BLOĞU ---
 
@@ -2268,6 +2306,7 @@ canvas.addEventListener('touchend', (e) => {
     // BURASI ÖNEMLİ: Parmağını çektiğinde onUp() çalışmalı.
     if (window.Scene3D) {
         window.Scene3D.onUp();
+}
 // 2. CANLANDIRMA (SNAPSHOT) - BU KISMI EKLE
     if (currentTool === 'snapshot' && snapshotStart) {
         const touch = e.changedTouches[0];
@@ -2293,23 +2332,28 @@ canvas.addEventListener('touchend', (e) => {
             newImg.src = tempCanvas.toDataURL();
             
             newImg.onload = () => {
-                drawnStrokes.push({
+                const newObj = {
                     type: 'image', img: newImg,
-                    x: rectX, y: rectY, width: rectW, height: rectH, rotation: 0
-                });
-                redrawAllStrokes();
+                    x: rectX, y: rectY, width: rectW, height: rectH, rotation: 0, isBackground: false
+                };
+                drawnStrokes.push(newObj);
                 
-                // Otomatik 'Taşı' moduna geç
-                currentTool = 'move';
-                document.querySelectorAll('.tool-button').forEach(b => b.classList.remove('active'));
-                const moveBtn = document.getElementById('btn-move');
-                if(moveBtn) moveBtn.classList.add('active');
+                // ▼▼▼ OTOMATİK TAŞI MODUNA GEÇİŞİ BURADA DA İPTAL ETTİK ▼▼▼
+                // currentTool = 'move';
+                // document.querySelectorAll('.tool-button').forEach(b => b.classList.remove('active'));
+                // const moveBtn = document.getElementById('btn-move');
+                // if(moveBtn) moveBtn.classList.add('active');
+                
+                selectedItem = newObj; // Yeni resmi seçili bırak (Butonlar çıksın)
+                isMoving = false;
+                
+                redrawAllStrokes();
             };
         }
         snapshotStart = null;
     }
 
-    }
+    
 
     // 3. Pinch Zoom Bitişi
     if (isPinching) {
@@ -2397,12 +2441,12 @@ canvas.addEventListener('touchend', (e) => {
                 snapshotStart = null;
                 
                 // Otomatik taşıma moduna geç
-                currentTool = 'move';
-                setActiveTool('move'); 
+                // currentTool = 'move';      <-- İPTAL EDİLDİ
+// setActiveTool('move');     <-- İPTAL EDİLDİ 
                 
                 selectedItem = newObj;
                 isMoving = false; 
-                returnToSnapshot = true; 
+                // returnToSnapshot = true;   <-- İPTAL EDİLDİ 
                 
                 redrawAllStrokes();
                 if (window.audio_click) { 
@@ -3823,7 +3867,10 @@ window.activeObject = this.currentMesh;
 // --- FARE BIRAKMA (MOUSEUP) - GÜÇLENDİRİLMİŞ ---
 window.addEventListener('mouseup', (e) => { // DÜZELTME: 'canvas' yerine 'window' yapıldı
 
-    // 1. 3D İşlemlerini Güvenli Bitir (Hata olsa bile devam et)
+// DÖNDÜRME SIFIRLAMA
+    window.isRotatingImageOnly = false;
+
+    // 1. 3D İşlemlerini Güvenli Bitir (Hata olsa bile devam et) 
     try {
         if (window.Scene3D) {
             // Eğer aktif bir 3D işlemi varsa bitir
@@ -3835,9 +3882,8 @@ window.addEventListener('mouseup', (e) => { // DÜZELTME: 'canvas' yerine 'windo
         console.error("3D MouseUp Hatası:", err);
     }
 
-    // 2. Taşıma İşlemini Bitir
-    if (currentTool === 'move' && isMoving) {
-        // (Buradaki ses durdurma kodu silindi)
+    // 2. Taşıma İşlemini Bitir (ARTIK HEM MOVE HEM SNAPSHOT MODUNDA ÇALIŞMALI)
+    if ((currentTool === 'move' || currentTool === 'snapshot') && isMoving) {
         
         // Değişkenleri Sıfırla
         isMoving = false; 
@@ -3854,7 +3900,9 @@ window.addEventListener('mouseup', (e) => { // DÜZELTME: 'canvas' yerine 'windo
         }
         
         redrawAllStrokes(); 
-        return;
+        
+        // EĞER SADECE RESMİ TAŞIYIP BIRAKTIYSAK, YENİ BİR KOPYALAMA ALANI AÇMASINI ENGELLE
+        if (currentTool === 'snapshot') return; 
     }
 
     // 3. Snapshot (Canlandırma) Bitişi
@@ -3905,13 +3953,14 @@ window.addEventListener('mouseup', (e) => { // DÜZELTME: 'canvas' yerine 'windo
                     drawnStrokes.push(newObj);
                     snapshotStart = null;
                     
-                    // Otomatik taşıma
-                    currentTool = 'move';
-                    setActiveTool('move'); // Butonları güncelle
+                    // ▼▼▼ DEĞİŞTİRİLECEK KISIM BURASI ▼▼▼
+                    // currentTool = 'move';       <-- Başına // koyup iptal et
+                    // setActiveTool('move');      <-- Başına // koyup iptal et
                     
-                    selectedItem = newObj;
-                    isMoving = false; // Hemen yapışmasın, tıklayınca taşınsın
-                    returnToSnapshot = true; 
+                    selectedItem = newObj;         // Resmi seçili bırak (butonlar görünsün)
+                    isMoving = false; 
+                    // returnToSnapshot = true;    <-- Başına // koyup iptal et
+                    // ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲
                     
                     redrawAllStrokes();
                     if (window.audio_click) { 
@@ -3987,6 +4036,9 @@ if(previewLabel2D) previewLabel2D.style.display = 'none';
 
 // --- DOKUNMA BIRAKMA (TOUCHEND) ---
 canvas.addEventListener('touchend', (e) => {
+
+// DÖNDÜRME SIFIRLAMA (Dokunmatik için)
+    window.isRotatingImageOnly = false;
 
     // 1. 3D Çizim ve Etkileşim Bitişi (DÜZELTME BURADA)
     // HATA: Burada daha önce 'onDown' yazıyordu, bu yüzden şekil oluşmuyordu.
@@ -4073,6 +4125,7 @@ if (currentTool.startsWith('draw_polygon_') && window.tempPolygonData && window.
         
         redrawAllStrokes();
     }
+
 
     // 5. Diğer Çizim Bitişleri
     const endPos = snapTarget || currentMousePos;
@@ -5124,7 +5177,7 @@ function handleEraseEvent(e) {
             if (typeof redrawAllStrokes === 'function') redrawAllStrokes();
             if (window.audio_eraser) { window.audio_eraser.currentTime = 0; window.audio_eraser.play(); }
             break;
-        }
+        }S
     }
 }
 
@@ -5133,4 +5186,3 @@ canvas.addEventListener('mousemove', handleEraseEvent);
 canvas.addEventListener('mousedown', handleEraseEvent);
 canvas.addEventListener('touchstart', handleEraseEvent, { passive: false });
 canvas.addEventListener('touchmove', handleEraseEvent, { passive: false });
-
