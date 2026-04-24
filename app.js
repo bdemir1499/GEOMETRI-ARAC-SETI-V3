@@ -1476,6 +1476,34 @@ canvas.addEventListener('mousedown', (e) => {
         return;
     }
 
+// ▼▼▼ ÇOKGEN / ÇEMBER BAŞLANGICI (PC İÇİN EKLENDİ) ▼▼▼
+    if (currentTool.startsWith('draw_polygon_') || currentTool === 'draw_circle') {
+        let type = 0;
+        const parts = currentTool.split('_');
+        if (parts.length > 2 && !isNaN(parseInt(parts[2]))) {
+            type = parseInt(parts[2]);
+        }
+        
+        window.tempPolygonData = {
+            type: type,
+            center: snapPos, 
+            radius: 0,
+            rotation: 0
+        };
+        
+        if(typeof polygonPreviewLabel !== 'undefined') {
+            polygonPreviewLabel.classList.remove('hidden');
+            polygonPreviewLabel.style.left = `${snapPos.x}px`;
+            polygonPreviewLabel.style.top = `${snapPos.y - 40}px`;
+            polygonPreviewLabel.innerText = "Merkez";
+        }
+        
+        redrawAllStrokes(); 
+        return; 
+    }
+    // ▲▲▲ ÇOKGEN / ÇEMBER BAŞLANGICI SONU ▲▲▲
+
+
     // Diğer Araçlar
     switch (currentTool) {
         case 'pen':
@@ -1790,6 +1818,63 @@ canvas.addEventListener('mousemove', (e) => {
         drawDot(lineStartPoint, currentLineColor); 
         drawDot(drawEndPos, currentLineColor);
     }
+
+// ▼▼▼ E) ÇOKGEN / ÇEMBER ÖNİZLEME (PC İÇİN EKLENDİ) ▼▼▼
+    else if (window.tempPolygonData && window.tempPolygonData.center) {
+        const center = window.tempPolygonData.center;
+        const type = window.tempPolygonData.type;
+        const currentRadius = distance(center, pos); 
+        
+        const dx = pos.x - center.x; 
+        const dy = pos.y - center.y;
+        const currentRotationRad = Math.atan2(dy, dx); 
+        const currentRotationDeg = currentRotationRad * (180 / Math.PI); 
+
+        window.tempPolygonData.rotation = currentRotationDeg; 
+        window.tempPolygonData.radius = currentRadius; 
+
+        redrawAllStrokes(); 
+        
+        ctx.save(); 
+        ctx.beginPath();
+        if (type === 0) {
+            ctx.arc(center.x, center.y, currentRadius, 0, 2 * Math.PI);
+        } else {
+            if(window.PolygonTool && window.PolygonTool.calculateVertices) {
+                const vertices = window.PolygonTool.calculateVertices(center, currentRadius, type, currentRotationDeg); 
+                if (vertices && vertices.length > 0) {
+                     ctx.moveTo(vertices[0].x, vertices[0].y);
+                     for (let i = 1; i < vertices.length; i++) ctx.lineTo(vertices[i].x, vertices[i].y);
+                     ctx.closePath();
+                }
+            }
+        }
+        ctx.globalAlpha = 0.6; 
+        ctx.setLineDash([10, 5]); 
+        ctx.strokeStyle = window.currentLineColor || '#00ffcc'; 
+        ctx.lineWidth = 3; 
+        ctx.stroke();
+        drawDot(center, window.currentLineColor);
+        
+        if(typeof polygonPreviewLabel !== 'undefined') {
+            polygonPreviewLabel.style.left = `${pos.x}px`;
+            polygonPreviewLabel.style.top = `${pos.y - 50}px`;
+            polygonPreviewLabel.classList.remove('hidden');
+            const pixelPerCm = (window.PolygonTool && window.PolygonTool.PIXELS_PER_CM) ? window.PolygonTool.PIXELS_PER_CM : 30;
+            const cmRadius = (currentRadius / pixelPerCm).toFixed(1);
+            let labelText = "";
+            if (type === 0) labelText = `Yarıçap: ${cmRadius} cm`; 
+            else {
+                const sideLen = ((2 * currentRadius * Math.sin(Math.PI / type)) / pixelPerCm).toFixed(1);
+                labelText = `Kenar: ${sideLen} cm`;
+            }
+            polygonPreviewLabel.innerText = labelText;
+        }
+        ctx.restore(); 
+        previewActive = true;
+    }
+    // ▲▲▲ ÇOKGEN / ÇEMBER ÖNİZLEME SONU ▲▲▲
+
     else if (window.tempPolygonData && window.tempPolygonData.center) {
         const center = window.tempPolygonData.center;
         const type = window.tempPolygonData.type;
@@ -1835,6 +1920,102 @@ canvas.addEventListener('mousemove', (e) => {
 
 canvas.addEventListener('touchstart', (e) => {
     const pos = getEventPosition(e);
+
+// ▼▼▼ 1. MOBİL İÇİN CANLANDIR/SNAPSHOT (RADAR SİSTEMİ) ▼▼▼
+    if (currentTool === 'snapshot') {
+        if (e.target && e.target.tagName !== 'CANVAS') return;
+        
+        if (selectedItem && selectedItem.type === 'image') {
+            const dx = pos.x - selectedItem.x;
+            const dy = pos.y - selectedItem.y;
+            const angleRad = -(selectedItem.rotation || 0) * (Math.PI / 180);
+            const unX = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+            const unY = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+
+            // Pembe Buton (Boyutlandırma)
+            const resizeX = selectedItem.width / 2;
+            const resizeY = selectedItem.height / 2;
+            if (Math.abs(unX - resizeX) < 30 && Math.abs(unY - resizeY) < 30) {
+                window.isResizingHandle = true;
+                isMoving = false;
+                window.safeStartX = pos.x; 
+                selectedItem.startDragWidth = selectedItem.width;
+                selectedItem.startDragHeight = selectedItem.height;
+                selectedItem.startDragX = selectedItem.x;
+                selectedItem.startDragY = selectedItem.y;
+                return;
+            }
+
+            // Mavi Buton (Döndürme)
+            const rotateX = 0;
+            const rotateY = -selectedItem.height / 2 - 30;
+            if (Math.abs(unX - rotateX) < 40 && Math.abs(unY - rotateY) < 40) {
+                window.isRotatingHandle = true;
+                window.isRotatingImageOnly = true;
+                isMoving = false;
+                selectedItem.startDragRotation = selectedItem.rotation || 0;
+                selectedItem.startClickAngle = Math.atan2(pos.y - selectedItem.y, pos.x - selectedItem.x) * (180 / Math.PI);
+                return; 
+            }
+            
+            // Resmin Gövdesi (Taşıma)
+            if (Math.abs(unX) <= selectedItem.width / 2 && Math.abs(unY) <= selectedItem.height / 2) {
+                isMoving = true;
+                dragStartPos = pos;
+                originalStartPos = { x: selectedItem.x, y: selectedItem.y };
+                if (e.preventDefault) e.preventDefault(); // Ekranın kaymasını engelle
+                return;
+            }
+            
+            selectedItem = null;
+            if (typeof redrawAllStrokes === 'function') redrawAllStrokes();
+            snapshotStart = pos;
+            return;
+        } 
+        snapshotStart = pos;
+        return;
+    }
+
+    // ▼▼▼ 2. MOBİL İÇİN TAŞIMA (MOVE) MOTORU ▼▼▼
+    if (currentTool === 'move') {
+        const hit = findHit(pos);
+        if (hit) {
+            isMoving = true;
+            selectedItem = hit.item;
+            selectedPointKey = hit.pointKey;
+            dragStartPos = pos;
+
+            // Neresinden tuttuğunu kaydet
+            if (hit.pointKey === 'self') originalStartPos = { x: hit.item.x, y: hit.item.y };
+            else if (hit.pointKey === 'p1') originalStartPos = { x: hit.item.p1.x, y: hit.item.p1.y };
+            else if (hit.pointKey === 'p2') originalStartPos = { x: hit.item.p2.x, y: hit.item.p2.y };
+            else if (hit.pointKey === 'center') {
+                if (hit.item.type === 'arc' || hit.item.type === 'circle') originalStartPos = { x: hit.item.cx, y: hit.item.cy };
+                else originalStartPos = { x: hit.item.center.x, y: hit.item.center.y };
+            }
+
+            // Pivot noktası (Çizgileri ucundan döndürmek için)
+            const itemType = hit.item.type;
+            if ((itemType === 'line' || itemType === 'segment' || itemType === 'ray' || itemType === 'straightLine') && (hit.pointKey === 'p1' || hit.pointKey === 'p2')) {
+                rotationPivot = (hit.pointKey === 'p1') ? hit.item.p2 : hit.item.p1;
+                const movingPoint = (hit.pointKey === 'p1') ? hit.item.p1 : hit.item.p2;
+                selectedItem.startRadius = distance(movingPoint, rotationPivot);
+            } else {
+                rotationPivot = null;
+            }
+            
+            redrawAllStrokes();
+            if (e.preventDefault) e.preventDefault(); // Sayfa kaymasını engelle
+            return; 
+        } 
+        
+        // Boşluğa dokunulursa seçimi bırak
+        isMoving = false;
+        selectedItem = null;
+        redrawAllStrokes();
+        return;
+    }
+
 
     // 1. ÖNCE ÇİFT PARMAK (PINCH ZOOM) KONTROLÜ
     if (e.touches.length === 2) {
@@ -2065,6 +2246,19 @@ if (currentTool.startsWith('draw_polygon_') || currentTool === 'draw_circle') {
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault(); 
     const pos = getEventPosition(e);
+
+
+// ▼▼▼ MOBİL İÇİN TAŞIMA VE SÜRÜKLEME MOTORU ▼▼▼
+    if ((currentTool === 'move' || currentTool === 'snapshot') && typeof isMoving !== 'undefined' && isMoving && selectedItem) {
+        if (e && e.cancelable) e.preventDefault();
+        const pos = getEventPosition(e);
+        const dx = pos.x - dragStartPos.x;
+        const dy = pos.y - dragStartPos.y;
+        selectedItem.x = originalStartPos.x + dx;
+        selectedItem.y = originalStartPos.y + dy;
+        if (typeof redrawAllStrokes === 'function') redrawAllStrokes();
+        return; 
+    }
 
     // ---------------------------------------------------------
     // 1. PINCH ZOOM (İKİ PARMAK)
