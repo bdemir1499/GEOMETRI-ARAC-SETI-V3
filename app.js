@@ -165,6 +165,36 @@ eraserPreview.className = 'eraser-cursor-preview';
 body.appendChild(eraserPreview);
 
 
+// --- KUSURSUZ KOORDİNAT OKUYUCU (MOUSE + DOKUNMATİK + YEDEK UYUMLU) ---
+function getEventPosition(e) {
+    if (!e) return { x: 0, y: 0 };
+    
+    const rect = canvas.getBoundingClientRect();
+    let clientX, clientY;
+
+    // 1. Dokunmatik Ekran (Ekrana basma ve sürükleme anı)
+    if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } 
+    // 2. Dokunmatik Ekran (Parmağı ekrandan ÇEKME anı - touchend/snapshot)
+    else if (e.changedTouches && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+    }
+    // 3. Mouse (Bilgisayar) veya senin gönderdiğin özel {clientX, clientY} objeleri
+    else {
+        clientX = e.clientX || 0;
+        clientY = e.clientY || 0;
+    }
+
+    return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+    };
+}
+
+
 // --- YARDIMCI FONKSİYONLAR ---
 
 function distance(p1, p2) {
@@ -201,12 +231,6 @@ function resizeCanvas() {
     redrawAllStrokes();
 }
 
-function getEventPosition(e) {
-    if (e.touches && e.touches.length > 0) {
-        return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    }
-    return { x: e.clientX, y: e.clientY };
-}
 
 function drawDot(pos, color = '#00FFCC') {
     ctx.beginPath();
@@ -1203,6 +1227,15 @@ document.querySelectorAll('.tool-button-sub-item, #btn-sphere').forEach(btn => {
 });
 
 // --- MOUSE OLAYLARI ---
+
+
+// --- KANVAS ÜZERİNDE SAĞ TIK VE BASILI TUTMA MENÜSÜNÜ İPTAL ET ---
+canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    return false;
+});
+
+
 
 // --- FARE TIKLAMA (MOUSEDOWN) - DÜZELTİLMİŞ ---
 canvas.addEventListener('mousedown', (e) => {
@@ -2365,6 +2398,8 @@ canvas.addEventListener('touchend', (e) => {
     if (window.Scene3D) {
         window.Scene3D.onUp();
 }
+
+
 // 2. CANLANDIRMA (SNAPSHOT) - BU KISMI EKLE
     if (currentTool === 'snapshot' && snapshotStart) {
         const touch = e.changedTouches[0];
@@ -5093,6 +5128,14 @@ if (window.Scene3D) {
         updatePos();
     };
 }
+
+
+// --- KANVAS ÜZERİNDE SAĞ TIK VE BASILI TUTMA MENÜSÜNÜ İPTAL ET ---
+canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    return false;
+});
+
 // -----------------------------------------------------------------
 // 3. 3D TIKLAMA YAKALAYICI (2D ÇOKGENLERİ BOZMAZ!)
 // -----------------------------------------------------------------
@@ -5188,10 +5231,6 @@ document.addEventListener('touchmove', function(e) {
 // -----------------------------------------------------------------
 // 5. KÖKTEN TEMİZLİK YAPAN KESİNTİSİZ SİLGİ (RAYCASTER + HTML TEMİZLİĞİ)
 // -----------------------------------------------------------------
-function getEventPosition(e) {
-    if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    return { x: e.clientX, y: e.clientY };
-}
 
 function handleEraseEvent(e) {
     if (!window.isEraserActive) return;
