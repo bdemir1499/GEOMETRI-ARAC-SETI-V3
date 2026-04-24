@@ -1223,44 +1223,73 @@ canvas.addEventListener('mousedown', (e) => {
         currentTool === 'draw_circle'
     );
 
-// ▼▼▼ CANLANDIR MODUNDA RESME TIKLAMA VE TUTMA ▼▼▼
+// ▼▼▼ CANLANDIR MODUNDA RESME TIKLAMA VE BUTONLARI TUTMA ▼▼▼
     if (currentTool === 'snapshot') {
         const pos = getEventPosition(e);
-        
-        // GÜVENLİK 1: Eğer tıklanan şey Canvas tahtası değil de bir HTML butonuysa, tıklamayı çalma!
         if (e.target && e.target.tagName !== 'CANVAS') return;
-
+        
+        // Ekranda seçili bir kopya resim varsa:
         if (selectedItem && selectedItem.type === 'image') {
+            
+            // 1. RADAR SİSTEMİ: Farenin resmin merkezine göre konumunu bul ve açıyı geriye çevir
             const dx = pos.x - selectedItem.x;
             const dy = pos.y - selectedItem.y;
+            const angleRad = -(selectedItem.rotation || 0) * (Math.PI / 180);
             
-            // 1. TAM RESMİN İÇİNE (GÖVDESİNE) TIKLANDIYSA -> Taşıma başlat
-            if (Math.abs(dx) <= selectedItem.width / 2 && Math.abs(dy) <= selectedItem.height / 2) {
+            // Farenin döndürülmemiş koordinatları (Resim düz duruyormuş gibi neresine tıklandığını bulur)
+            const unX = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+            const unY = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+
+            // 2. BOYUTLANDIRMA (PEMBE) BUTONUNA TIKLANDI MI? (Sağ Alt Köşe)
+            const resizeX = selectedItem.width / 2;
+            const resizeY = selectedItem.height / 2;
+            
+            // 20 piksellik bir isabet alanı (Tolerans)
+            if (Math.abs(unX - resizeX) < 20 && Math.abs(unY - resizeY) < 20) {
+                window.isResizingHandle = true;
+                isMoving = false; // Taşımayı kilitliyoruz
+                window.safeStartX = pos.x; // KANVAS KOORDİNATINI BURADA MÜHÜRLÜYORUZ!
+                selectedItem.startDragWidth = selectedItem.width;
+                selectedItem.startDragHeight = selectedItem.height;
+                selectedItem.startDragX = selectedItem.x;
+                selectedItem.startDragY = selectedItem.y;
+                return; // İşlem tamam, aşağı inme
+            }
+
+            // 3. DÖNDÜRME (MAVİ) BUTONUNA TIKLANDI MI? (Üst Orta)
+            const rotateX = 0;
+            const rotateY = -selectedItem.height / 2 - 30; // Eğer senin mavi buton daha yukarıdaysa -30'u -40 yapabilirsin
+            
+            // İsabet alanını (Toleransı) 20'den 40'a çıkardık ki tıklamayı asla ıskalamasın!
+            if (Math.abs(unX - rotateX) < 40 && Math.abs(unY - rotateY) < 40) {
+                window.isRotatingHandle = true;
+                window.isRotatingImageOnly = true; // Eski kodunla da %100 uyumlu olsun diye bunu ekledik
+                isMoving = false;
+                selectedItem.startDragRotation = selectedItem.rotation || 0;
+                selectedItem.startClickAngle = Math.atan2(pos.y - selectedItem.y, pos.x - selectedItem.x) * (180 / Math.PI);
+                return; 
+            }
+            
+            // 4. RESMİN GÖVDESİNE TIKLANDI MI? (Sadece taşıma)
+            if (Math.abs(unX) <= selectedItem.width / 2 && Math.abs(unY) <= selectedItem.height / 2) {
                 isMoving = true;
                 dragStartPos = pos;
                 originalStartPos = { x: selectedItem.x, y: selectedItem.y };
-                return; // Taşıma başladı, aşağıya inme
-            }
-            
-            // 2. RESMİN ETRAFINDAKİ BUTONLARA TIKLANDIYSA (Genişlik + 50px Tolerans Alanı)
-            if (Math.abs(dx) <= selectedItem.width / 2 + 50 && Math.abs(dy) <= selectedItem.height / 2 + 50) {
-                // DİKKAT: Burada bilerek hiçbir şey yapmıyoruz ve 'return' DEMİYORUZ! 
-                // Böylece kod aşağıya inmeye devam edip senin Döndürme/Boyutlandırma olaylarını bulup çalıştırabilecek.
-            } 
-            // 3. TAMAMEN UZAK BİR BOŞLUĞA TIKLANDIYSA -> Eski resmi bırak, yeni seçim başlat
-            else {
-                selectedItem = null;
-                if (typeof redrawAllStrokes === 'function') redrawAllStrokes();
-                snapshotStart = snapTarget ? snapTarget : pos;
                 return;
             }
-        } else {
-            // Ekranda seçili resim yoksa direkt yeni kopyalama başlat
-            snapshotStart = snapTarget ? snapTarget : pos;
+            
+            // 5. RESMİN DIŞINA BOŞLUĞA TIKLANDI MI? (Eski resmi bırak, yeni seçim başlat)
+            selectedItem = null;
+            if (typeof redrawAllStrokes === 'function') redrawAllStrokes();
+            snapshotStart = pos;
             return;
-        }
+        } 
+        
+        // Ekranda seçili resim yoksa direkt yeni kopyalama başlat
+        snapshotStart = pos;
+        return;
     }
-    // ▲▲▲ ▲▲▲ ▲▲▲
+    // ▲▲▲ ▲▲▲ ▲▲▲    // ▲▲▲ ▲▲▲ ▲▲▲
     // 2. Silgiye özel komutu listenin DIŞINA ve ALTINA yaz
     if (currentTool === 'eraser') {
         isDrawing = true; // Sürükleme başlasın
@@ -1477,6 +1506,35 @@ canvas.addEventListener('mousemove', (e) => {
     }
     // ▲▲▲ ▲▲▲ ▲▲▲
 
+// ▼▼▼ YENİDEN BOYUTLANDIRMA (RESIZE) MOTORU (KUSURSUZ) ▼▼▼
+    if (window.isResizingHandle && selectedItem && selectedItem.type === 'image') {
+        if (e && e.cancelable) e.preventDefault();
+        
+        // ŞU ANKİ FARE KONUMU
+        const pos = getEventPosition(e);
+        
+        // FARKI HESAPLA (Şimdiki konum - Tıklandığı andaki konum)
+        const dx = pos.x - (window.safeStartX || pos.x);
+
+        // Orijinal Boyutlar
+        const startW = selectedItem.startDragWidth || selectedItem.width;
+        const startH = selectedItem.startDragHeight || selectedItem.height;
+
+        // Yeni Boyutlar (En az 20 piksel)
+        const newWidth = Math.max(20, startW + dx);
+        const ratio = startH / startW;
+        const newHeight = Math.max(20, newWidth * ratio);
+
+        selectedItem.width = newWidth;
+        selectedItem.height = newHeight;
+
+        // SABİTLEME: Sol üst köşeyi yerinde tut, resmi sağa/aşağı büyüt
+        selectedItem.x = (selectedItem.startDragX || selectedItem.x) + ((newWidth - startW) / 2);
+        selectedItem.y = (selectedItem.startDragY || selectedItem.y) + ((newHeight - startH) / 2);
+
+        if (typeof redrawAllStrokes === 'function') redrawAllStrokes();
+        return; 
+    }
     // ▼▼▼ 3. ADIM: DÖNDÜRME ANİMASYONU ▼▼▼
     if (window.isRotatingImageOnly && selectedItem && selectedItem.type === 'image') {
         const dx = pos.x - selectedItem.x;
@@ -2434,6 +2492,11 @@ canvas.addEventListener('touchend', (e) => {
                     y: y + h / 2, 
                     width: w, 
                     height: h, 
+                    // ▼▼▼ EKSİK OLAN VE ÇÖKMEYİ ÖNLEYEN 3 SATIR ▼▼▼
+                    originalWidth: w,    
+                    originalHeight: h,   
+                    originalRotation: 0, 
+                    // ▲▲▲ ▲▲▲ ▲▲▲
                     rotation: 0,
                     isBackground: false 
                 };
@@ -2885,22 +2948,33 @@ window.activeObject = this.currentMesh;
         this.resizeHandleBtn.className = 'handle-3d handle-3d-resize';
         document.body.appendChild(this.resizeHandleBtn);
 
-        // Olay Dinleyicileri
-        const startInteract = (mode, e) => {
-            e.preventDefault(); e.stopPropagation();
-            this[mode] = true;
-            const evt = e.touches ? e.touches[0] : e;
-            this.lastMousePos = { x: evt.clientX, y: evt.clientY };
-            
-            if (mode === 'isResizingHandle' && this.currentMesh) {
-                this.startScale = this.currentMesh.scale.x;
-                if(this.handles && this.handles.center) {
-                     const c = this.handles.center;
-                     this.startResizeDist = Math.hypot(evt.clientX - c.x, evt.clientY - c.y);
-                }
-            }
-        };
+      const startInteract = (action, e) => {
+    if (e && e.cancelable) e.preventDefault();
+    if (e) e.stopPropagation();
 
+    window[action] = true;
+    isMoving = false; // Çakışmayı önlemek için taşımayı kapat
+
+    // KANVAS ÜZERİNDEKİ NET KONUMU AL (Butonun kendi koordinatını değil!)
+    const pos = getEventPosition(e);
+    window.safeStartX = pos.x;
+    window.safeStartY = pos.y;
+
+    if (selectedItem) {
+        // Başlangıç değerlerini resmin üzerine mühürle
+        selectedItem.startDragWidth = selectedItem.width;
+        selectedItem.startDragHeight = selectedItem.height;
+        selectedItem.startDragX = selectedItem.x;
+        selectedItem.startDragY = selectedItem.y;
+        selectedItem.startDragRotation = selectedItem.rotation || 0;
+
+        // Döndürme için başlangıç açısı
+        const centerX = selectedItem.x;
+        const centerY = selectedItem.y;
+        selectedItem.startClickAngle = Math.atan2(pos.y - centerY, pos.x - centerX) * (180 / Math.PI);
+    }
+    document.body.style.userSelect = 'none'; // Mavi seçimi engelle
+};
         ['mousedown', 'touchstart'].forEach(evt => {
             this.rotateHandleBtn.addEventListener(evt, (e) => startInteract('isRotatingHandle', e), {passive: false});
             this.resizeHandleBtn.addEventListener(evt, (e) => startInteract('isResizingHandle', e), {passive: false});
@@ -3867,6 +3941,11 @@ window.activeObject = this.currentMesh;
 // --- FARE BIRAKMA (MOUSEUP) - GÜÇLENDİRİLMİŞ ---
 window.addEventListener('mouseup', (e) => { // DÜZELTME: 'canvas' yerine 'window' yapıldı
 
+// Fare/Parmak bırakıldığında korumaları kaldır
+    document.body.style.userSelect = '';
+    window.isResizingHandle = false;
+    window.isRotatingHandle = false;
+
 // DÖNDÜRME SIFIRLAMA
     window.isRotatingImageOnly = false;
 
@@ -3941,15 +4020,20 @@ window.addEventListener('mouseup', (e) => { // DÜZELTME: 'canvas' yerine 'windo
                 newImg.src = tempCanvas.toDataURL();
                 newImg.onload = () => {
                     const newObj = { 
-                        type: 'image', 
-                        img: newImg, 
-                        x: x + w / 2, 
-                        y: y + h / 2, 
-                        width: w, 
-                        height: h, 
-                        rotation: 0,
-                        isBackground: false // Hareket edebilir
-                    };
+                    type: 'image', 
+                    img: newImg, 
+                    x: x + w / 2, 
+                    y: y + h / 2, 
+                    width: w, 
+                    height: h, 
+                    // ▼▼▼ EKSİK OLAN VE ÇÖKMEYİ ÖNLEYEN 3 SATIR ▼▼▼
+                    originalWidth: w,    
+                    originalHeight: h,   
+                    originalRotation: 0, 
+                    // ▲▲▲ ▲▲▲ ▲▲▲
+                    rotation: 0,
+                    isBackground: false 
+                };
                     drawnStrokes.push(newObj);
                     snapshotStart = null;
                     
@@ -4036,6 +4120,12 @@ if(previewLabel2D) previewLabel2D.style.display = 'none';
 
 // --- DOKUNMA BIRAKMA (TOUCHEND) ---
 canvas.addEventListener('touchend', (e) => {
+
+// Fare/Parmak bırakıldığında korumaları kaldır
+    document.body.style.userSelect = '';
+    window.isResizingHandle = false;
+    window.isRotatingHandle = false;
+
 
 // DÖNDÜRME SIFIRLAMA (Dokunmatik için)
     window.isRotatingImageOnly = false;
