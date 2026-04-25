@@ -1301,6 +1301,17 @@ canvas.addEventListener('mousedown', (e) => {
 
     // 2. TAŞIMA (MOVE) MODU (ÇOKGEN VE ÇEMBER DESTEKLİ)
     if (currentTool === 'move') {
+
+// ▼▼▼ YENİ: Önce 3D Nesneyi Tutmaya Çalış ▼▼▼
+        if (window.Scene3D && window.Scene3D.isInit) {
+            const is3DHit = window.Scene3D.onDown(pos.x, pos.y);
+            if (is3DHit) {
+                window.isMoving3D = true; // 3D hareket başladığını mühürle
+                return; // 3D nesne tutuldu, aşağıya (2D'ye) bakma
+            }
+        }
+        // ▲▲▲ ▲▲▲ ▲▲▲
+
         const hit = findHit(pos);
         if (hit) {
             // Bilgi Panellerini Aç/Kapa (Kenar, Açı, Çember Formülü)
@@ -1467,6 +1478,14 @@ window.tempPolygonData = null;
 
 // --- FARE HAREKETİ (MOUSEMOVE) - TAMİR EDİLMİŞ VE SÜRÜKLEME EKLENMİŞ SÜRÜM ---
 canvas.addEventListener('mousemove', (e) => {
+
+// ▼▼▼ YENİ: 3D NESNE SÜRÜKLEME MOTORU ▼▼▼
+    if (currentTool === 'move' && window.isMoving3D && window.Scene3D) {
+        window.Scene3D.onMove(pos.x, pos.y);
+        return; // İşlem 3D'de yapıldı, 2D motorunu çalıştırma
+    }
+    // ▲▲▲ ▲▲▲ ▲▲▲
+
     const pos = getEventPosition(e);
 
     // ▼▼▼ YENİ: CANLANDIR MODUNDA SÜRÜKLEME MOTORU ▼▼▼
@@ -4083,6 +4102,10 @@ window.activeObject = this.currentMesh;
 // --- FARE BIRAKMA (MOUSEUP) - GÜÇLENDİRİLMİŞ ---
 window.addEventListener('mouseup', (e) => { // DÜZELTME: 'canvas' yerine 'window' yapıldı
 
+    window.isMoving3D = false; // 3D taşıma kilidini aç
+    if (window.Scene3D) window.Scene3D.onUp(); // 3D motoruna "bırakıldı" de
+
+
 // Fare/Parmak bırakıldığında korumaları kaldır
     document.body.style.userSelect = '';
     window.isResizingHandle = false;
@@ -4262,6 +4285,10 @@ if(previewLabel2D) previewLabel2D.style.display = 'none';
 
 // --- DOKUNMA BIRAKMA (TOUCHEND) ---
 canvas.addEventListener('touchend', (e) => {
+
+window.isMoving3D = false; // 3D taşıma kilidini aç
+    if (window.Scene3D) window.Scene3D.onUp(); // 3D motoruna "bırakıldı" de
+
 
 // Fare/Parmak bırakıldığında korumaları kaldır
     document.body.style.userSelect = '';

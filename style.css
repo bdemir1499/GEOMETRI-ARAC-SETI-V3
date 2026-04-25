@@ -299,8 +299,9 @@ body.cursor-eraser .eraser-cursor-preview {
     left: auto !important; /* Sol taraftan gelen komutları iptal et */
     
     /* Dikey Ortalama */
-    top: 50% !important;
-    transform: translateY(-50%) !important;
+    /* Sol panelin hizasına (Yukarı) çekildi */
+    top: 3% !important;
+    transform: none !important;
     
     /* Görünüm Ayarları */
     width: auto;
