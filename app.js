@@ -71,7 +71,7 @@ let initialDistance = 0;          // Başlangıç parmak mesafesi (zoom için)
 let initialScale = 0;             // Başlangıçta seçili nesnenin genişliği
 let initialCenter = { x: 0, y: 0 }; // İki parmağın merkez noktası (pan için)
 let currentPenColor = '#FFFFFF'; 
-let currentPenWidth = 4;
+let currentPenWidth = 3;
 window.currentLineColor = '#FFFFFF'; // Varsayılan Renk: BEYAZ
 const SNAP_THRESHOLD = 10;
 let returnToSnapshot = false; // İşlem bitince geri dönülecek mi? 
@@ -4713,26 +4713,25 @@ function findHit(pos) {
     return null; 
 }
 
-// --- KALEM KALINLIK AYARI ---
+// --- KALEM KALINLIK AYARI (BAŞLANGIÇ DEĞERİ 3 OLARAK GÜNCELLENDİ) ---
 const penWidthSlider = document.getElementById('pen-width-slider');
 const penWidthValueLabel = document.getElementById('pen-width-value');
 
 if (penWidthSlider && penWidthValueLabel) {
+    // ▼▼▼ AÇILIŞTA ZORLA 3 YAP (EKLEMEN GEREKEN KISIM) ▼▼▼
+    const defaultWidth = 3;
+    penWidthSlider.value = defaultWidth; // Sürgüyü 3'e çek
+    penWidthValueLabel.innerText = defaultWidth; // Yazıyı 3 yap
+    currentPenWidth = defaultWidth; // Çizim değişkenini 3 yap
+    // ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲
+
     penWidthSlider.addEventListener('input', (e) => {
-        // 1. Değeri al
         const newWidth = parseInt(e.target.value);
-        
-        // 2. Global değişkeni güncelle
         currentPenWidth = newWidth;
-        
-        // 3. Etiketi güncelle
         penWidthValueLabel.innerText = newWidth;
-        
-        // İsteğe bağlı: Çizgi, Çokgen vb. kalınlığını da buna bağlamak isterseniz:
-        // window.currentLineColor kullanıldığı gibi bir window.currentLineWidth da yapabilirsiniz.
-        // Şimdilik sadece kalemi etkiliyor.
     });
 }
+
 
 // --- KESİN ÇÖZÜM: SÜRGÜ MOTORU ---
 const unfoldSlider = document.getElementById('unfold-slider'); 
@@ -5423,6 +5422,27 @@ function handleEraseEvent(e) {
         else if (s.path) { hit = s.path.some((p, idx) => idx % 4 === 0 && distance(pos, p) < 25); }
         else if (s.p1 && s.p2) { if (distanceToSegment(pos, s.p1, s.p2) < 20) hit = true; }
         else if (s.type === 'point') { if (distance(pos, s) < 15) hit = true; }
+
+        // ▼▼▼ YENİ: RESİM (SNAPSHOT) SİLME KONTROLÜ ▼▼▼
+        // ▼▼▼ GÜNCELLENMİŞ RESİM SİLME (PDF KORUMALI) ▼▼▼
+        else if (s.type === 'image') {
+            // KRİTİK KORUMA: Eğer resim bir arka plansa (PDF ise) silme işlemini ATLA
+            if (s.isBackground === true) continue; 
+
+            const dx = pos.x - s.x;
+            const dy = pos.y - s.y;
+            const angleRad = -(s.rotation || 0) * (Math.PI / 180);
+            const unX = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+            const unY = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+
+            if (Math.abs(unX) <= s.width / 2 && Math.abs(unY) <= s.height / 2) {
+                hit = true;
+                if (selectedItem === s) selectedItem = null;
+            }
+        }
+        // ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲
+
+
         else if (s.type === 'text' || s.label || s.isLabel) { if (distance(pos, s) < 30) hit = true; }
 
         if (hit) {
