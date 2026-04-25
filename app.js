@@ -555,36 +555,49 @@ function redrawAllStrokes() {
                 drawDot(centerPos, stroke.color);
                 if (stroke.label) drawLabel(stroke.label, centerPos, '#FF69B4');
 
-                // Çember Bilgisi
+                // ▼▼▼ ÇEMBER BİLGİSİ (Pİ = 3 VE ADIM ADIM FORMÜL) ▼▼▼
                 if (stroke.showCircleInfo) {
-                    ctx.beginPath();
-                    ctx.moveTo(centerPos.x, centerPos.y);
-                    ctx.lineTo(centerPos.x + stroke.radius, centerPos.y);
-                    ctx.strokeStyle = '#FF69B4';
-                    ctx.lineWidth = 1;
-                    ctx.setLineDash([2, 2]);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-
-                    const PI = (window.PolygonTool && window.PolygonTool.PI_VALUE) ? window.PolygonTool.PI_VALUE : 3;
                     const r_px = stroke.radius;
-                    const pixelPerCm = (window.PolygonTool && window.PolygonTool.PIXELS_PER_CM) ? window.PolygonTool.PIXELS_PER_CM : 30;
-                    const r_cm_raw = (r_px / pixelPerCm);
-                    const r_cm_calc = parseFloat(r_cm_raw.toFixed(2));
-                    const r_cm_str = r_cm_raw.toFixed(2).replace('.', ',');
-                    const circ_str = (2 * PI * r_cm_calc).toFixed(2).replace('.', ',');
-                    const area_str = (PI * r_cm_calc * r_cm_calc).toFixed(2).replace('.', ',');
+                    const pixelPerCm = 30; 
+                    const r_cm = (r_px / pixelPerCm).toFixed(1);
+                    
+                    const cevre = (2 * 3 * parseFloat(r_cm)).toFixed(1);
+                    const alan = (3 * Math.pow(parseFloat(r_cm), 2)).toFixed(1);
 
-                    const labelX = centerPos.x + r_px + 10;
-                    let labelY = centerPos.y - 20;
+                    const labelX = stroke.cx + r_px + 15;
+                    let labelY = stroke.cy - 25;
 
-                    drawLabel(`r = ${r_cm_str} cm`, { x: centerPos.x + (r_px / 2) - 20, y: centerPos.y - 10 }, '#FFFF00');
-                    drawLabel(`Ç = 2 . π . r`, { x: labelX, y: labelY }, '#FFFF00'); labelY += 20;
-                    drawLabel(`= 2 . ${PI} . ${r_cm_str} = ${circ_str} cm`, { x: labelX, y: labelY }, '#FFFF00'); labelY += 25;
-                    drawLabel(`A = π . r²`, { x: labelX, y: labelY }, '#FFFF00'); labelY += 20;
-                    drawLabel(`= ${PI} . ${r_cm_str}² = ${area_str} cm²`, { x: labelX, y: labelY }, '#FFFF00'); labelY += 25;
-                    drawLabel(`(π = ${PI} alındı)`, { x: labelX, y: labelY }, '#AAAAAA');
+                    ctx.save();
+                    ctx.fillStyle = '#00ffcc'; // Neon Yeşil
+                    ctx.font = 'bold 15px Arial';
+                    ctx.textAlign = 'left';
+
+                    ctx.fillText(`r = ${r_cm} cm`, labelX, labelY);
+                    labelY += 25;
+                    ctx.fillText(`Çevre = 2 . π . r`, labelX, labelY);
+                    labelY += 20;
+                    ctx.fillText(`= 2 . 3 . ${r_cm} = ${cevre} cm`, labelX, labelY);
+                    labelY += 30;
+                    ctx.fillText(`Alan = π . r²`, labelX, labelY);
+                    labelY += 20;
+                    ctx.fillText(`= 3 . (${r_cm})² = ${alan} cm²`, labelX, labelY);
+                    labelY += 25;
+                    ctx.font = 'italic 13px Arial';
+                    ctx.fillStyle = '#aaaaaa';
+                    ctx.fillText(`(π = 3 alındı)`, labelX, labelY);
+                    ctx.restore();
+
+                    // Yarıçap Çizgisi (Pembe Kesik Çizgi)
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(stroke.cx, stroke.cy);
+                    ctx.lineTo(stroke.cx + r_px, stroke.cy);
+                    ctx.strokeStyle = '#FF69B4';
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.restore();
                 }
+                // ▲▲▲ ÇEMBER BİLGİSİ SONU ▲▲▲
             }
 
         } catch (err) {
@@ -1241,6 +1254,87 @@ canvas.addEventListener('contextmenu', (e) => {
 canvas.addEventListener('mousedown', (e) => {
     const pos = getEventPosition(e);
 
+// ================================================================
+    // YENİ BİRLEŞTİRİLMİŞ TAŞIMA, CANLANDIRMA VE AÇ/KAPA MOTORU (PC)
+    // ================================================================
+    
+    // 1. CANLANDIR (SNAPSHOT) MODU
+    if (currentTool === 'snapshot') {
+        if (e.target && e.target.tagName !== 'CANVAS') return;
+        if (selectedItem && selectedItem.type === 'image') {
+            const dx = pos.x - selectedItem.x;
+            const dy = pos.y - selectedItem.y;
+            const angleRad = -(selectedItem.rotation || 0) * (Math.PI / 180);
+            const unX = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+            const unY = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+
+            // Pembe Buton (Resim Boyutlandırma)
+            if (Math.abs(unX - selectedItem.width/2) < 30 && Math.abs(unY - selectedItem.height/2) < 30) {
+                window.isResizingHandle = true; isMoving = false;
+                window.safeStartX = pos.x; 
+                selectedItem.startDragWidth = selectedItem.width;
+                selectedItem.startDragHeight = selectedItem.height;
+                selectedItem.startDragX = selectedItem.x;
+                selectedItem.startDragY = selectedItem.y;
+                return;
+            }
+            // Mavi Buton (Resim Döndürme)
+            if (Math.abs(unX - 0) < 40 && Math.abs(unY - (-selectedItem.height/2 - 30)) < 40) {
+                window.isRotatingHandle = true; window.isRotatingImageOnly = true; isMoving = false;
+                selectedItem.startDragRotation = selectedItem.rotation || 0;
+                selectedItem.startClickAngle = Math.atan2(pos.y - selectedItem.y, pos.x - selectedItem.x) * (180 / Math.PI);
+                return; 
+            }
+            // Resmin Gövdesini Tutma
+            if (Math.abs(unX) <= selectedItem.width/2 && Math.abs(unY) <= selectedItem.height/2) {
+                isMoving = true; dragStartPos = pos;
+                originalStartPos = { x: selectedItem.x, y: selectedItem.y };
+                return;
+            }
+        }
+        // Hiçbir şey tutulmadıysa yeni seçim çerçevesi başlat
+        selectedItem = null;
+        redrawAllStrokes();
+        snapshotStart = pos;
+        return;
+    }
+
+    // 2. TAŞIMA (MOVE) MODU (ÇOKGEN VE ÇEMBER DESTEKLİ)
+    if (currentTool === 'move') {
+        const hit = findHit(pos);
+        if (hit) {
+            // Bilgi Panellerini Aç/Kapa (Kenar, Açı, Çember Formülü)
+            let actionDone = false;
+            if (hit.pointKey === 'toggle_circle_info') { hit.item.showCircleInfo = !hit.item.showCircleInfo; actionDone = true; }
+            else if (hit.pointKey === 'toggle_edges') { hit.item.showEdgeLabels = !hit.item.showEdgeLabels; actionDone = true; }
+            else if (hit.pointKey === 'toggle_angles') { hit.item.showAngleLabels = !hit.item.showAngleLabels; actionDone = true; }
+
+            if (actionDone) { redrawAllStrokes(); return; }
+
+            // Taşıma veya Düzenleme (Handle) İşlemini Başlat
+            isMoving = true; selectedItem = hit.item; selectedPointKey = hit.pointKey; dragStartPos = pos;
+            
+            if (hit.pointKey === 'self') originalStartPos = { x: hit.item.x, y: hit.item.y };
+            else if (hit.pointKey === 'center') {
+                originalStartPos = (hit.item.type === 'arc' || hit.item.type === 'circle') ? { x: hit.item.cx, y: hit.item.cy } : { x: hit.item.center.x, y: hit.item.center.y };
+            }
+            else if (hit.pointKey === 'p1') originalStartPos = { x: hit.item.p1.x, y: hit.item.p1.y };
+            else if (hit.pointKey === 'p2') originalStartPos = { x: hit.item.p2.x, y: hit.item.p2.y };
+            else if (hit.pointKey === 'rotate' || hit.pointKey === 'resize' || hit.pointKey === 'image_resize') {
+                originalStartPos = { radius: hit.item.radius, rotation: hit.item.rotation, width: hit.item.width, height: hit.item.height };
+                if (hit.pointKey === 'rotate') {
+                    const center = (hit.item.type === 'arc' || hit.item.type === 'circle') ? {x: hit.item.cx, y: hit.item.cy} : hit.item.center;
+                    window.dragStartAngle = Math.atan2(pos.y - center.y, pos.x - center.x) * (180 / Math.PI);
+                }
+            }
+            redrawAllStrokes();
+            return;
+        }
+        isMoving = false; selectedItem = null; redrawAllStrokes();
+        return;
+    }
+
+
     // ▼▼▼ DÜZELTME BAŞLANGICI: Çizim yaparken 3D'yi yoksay ▼▼▼
     
     // Eğer çizim araçlarından biri seçiliyse, 3D etkileşimine izin verme
@@ -1256,73 +1350,6 @@ canvas.addEventListener('mousedown', (e) => {
         currentTool === 'draw_circle'
     );
 
-// ▼▼▼ CANLANDIR MODUNDA RESME TIKLAMA VE BUTONLARI TUTMA ▼▼▼
-    if (currentTool === 'snapshot') {
-        const pos = getEventPosition(e);
-        if (e.target && e.target.tagName !== 'CANVAS') return;
-        
-        // Ekranda seçili bir kopya resim varsa:
-        if (selectedItem && selectedItem.type === 'image') {
-            
-            // 1. RADAR SİSTEMİ: Farenin resmin merkezine göre konumunu bul ve açıyı geriye çevir
-            const dx = pos.x - selectedItem.x;
-            const dy = pos.y - selectedItem.y;
-            const angleRad = -(selectedItem.rotation || 0) * (Math.PI / 180);
-            
-            // Farenin döndürülmemiş koordinatları (Resim düz duruyormuş gibi neresine tıklandığını bulur)
-            const unX = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
-            const unY = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
-
-            // 2. BOYUTLANDIRMA (PEMBE) BUTONUNA TIKLANDI MI? (Sağ Alt Köşe)
-            const resizeX = selectedItem.width / 2;
-            const resizeY = selectedItem.height / 2;
-            
-            // 20 piksellik bir isabet alanı (Tolerans)
-            if (Math.abs(unX - resizeX) < 20 && Math.abs(unY - resizeY) < 20) {
-                window.isResizingHandle = true;
-                isMoving = false; // Taşımayı kilitliyoruz
-                window.safeStartX = pos.x; // KANVAS KOORDİNATINI BURADA MÜHÜRLÜYORUZ!
-                selectedItem.startDragWidth = selectedItem.width;
-                selectedItem.startDragHeight = selectedItem.height;
-                selectedItem.startDragX = selectedItem.x;
-                selectedItem.startDragY = selectedItem.y;
-                return; // İşlem tamam, aşağı inme
-            }
-
-            // 3. DÖNDÜRME (MAVİ) BUTONUNA TIKLANDI MI? (Üst Orta)
-            const rotateX = 0;
-            const rotateY = -selectedItem.height / 2 - 30; // Eğer senin mavi buton daha yukarıdaysa -30'u -40 yapabilirsin
-            
-            // İsabet alanını (Toleransı) 20'den 40'a çıkardık ki tıklamayı asla ıskalamasın!
-            if (Math.abs(unX - rotateX) < 40 && Math.abs(unY - rotateY) < 40) {
-                window.isRotatingHandle = true;
-                window.isRotatingImageOnly = true; // Eski kodunla da %100 uyumlu olsun diye bunu ekledik
-                isMoving = false;
-                selectedItem.startDragRotation = selectedItem.rotation || 0;
-                selectedItem.startClickAngle = Math.atan2(pos.y - selectedItem.y, pos.x - selectedItem.x) * (180 / Math.PI);
-                return; 
-            }
-            
-            // 4. RESMİN GÖVDESİNE TIKLANDI MI? (Sadece taşıma)
-            if (Math.abs(unX) <= selectedItem.width / 2 && Math.abs(unY) <= selectedItem.height / 2) {
-                isMoving = true;
-                dragStartPos = pos;
-                originalStartPos = { x: selectedItem.x, y: selectedItem.y };
-                return;
-            }
-            
-            // 5. RESMİN DIŞINA BOŞLUĞA TIKLANDI MI? (Eski resmi bırak, yeni seçim başlat)
-            selectedItem = null;
-            if (typeof redrawAllStrokes === 'function') redrawAllStrokes();
-            snapshotStart = pos;
-            return;
-        } 
-        
-        // Ekranda seçili resim yoksa direkt yeni kopyalama başlat
-        snapshotStart = pos;
-        return;
-    }
-    // ▲▲▲ ▲▲▲ ▲▲▲    // ▲▲▲ ▲▲▲ ▲▲▲
     // 2. Silgiye özel komutu listenin DIŞINA ve ALTINA yaz
     if (currentTool === 'eraser') {
         isDrawing = true; // Sürükleme başlasın
@@ -1356,126 +1383,12 @@ canvas.addEventListener('mousedown', (e) => {
         return; 
     }
 
-    // 3. "TAŞI" VEYA "CANLANDIR" MODUNDA RESİM SEÇİM/SÜRÜKLEME
-    if (currentTool === 'move' || currentTool === 'snapshot') {
-        const pos = getEventPosition(e);
-        
-        // 3D Sahne Kontrolü
-        if (window.Scene3D) {
-            const is3DHandle = window.Scene3D.onDown(pos.x, pos.y);
-            if (is3DHandle) return; 
-        }
-
-        // --- 1. MAVİ DÖNDÜRME BUTONUNA TIKLANDI MI? ---
-        if (selectedItem && selectedItem.type === 'image') {
-            const angleRad = (selectedItem.rotation || 0) * Math.PI / 180;
-            const handleY = -selectedItem.height / 2 - 30; 
-            const rotX = selectedItem.x - handleY * Math.sin(angleRad);
-            const rotY = selectedItem.y + handleY * Math.cos(angleRad);
-            
-            if (Math.hypot(pos.x - rotX, pos.y - rotY) < 15) {
-                window.isRotatingImageOnly = true; 
-                if (e.preventDefault) e.preventDefault();
-                return; // Döndürme başladı, aşağı inmesini KES
-            }
-        }
-
-        // --- 2. RESME VEYA PEMBE BUTONA TIKLANDI MI? ---
-        const hit = findHit(pos);
-        if (hit) {
-            // Eğer "Canlandır" modundaysak sadece resimlere müdahale etmesine izin ver.
-            if (currentTool === 'snapshot' && hit.item.type !== 'image') {
-                // Başka bir şekle tıklandıysa yoksay ki arka planda yeni seçim çizebilsin
-            } else {
-                // Resmi tuttu! Taşıma başlıyor.
-                isMoving = true;
-                selectedItem = hit.item;
-                selectedPointKey = hit.pointKey;
-                dragStartPos = pos;
-
-                // Başlangıç Pozisyonunu Kaydet
-                if (hit.pointKey === 'self') originalStartPos = { x: hit.item.x, y: hit.item.y };
-                else if (hit.pointKey === 'p1') originalStartPos = { x: hit.item.p1.x, y: hit.item.p1.y };
-                else if (hit.pointKey === 'p2') originalStartPos = { x: hit.item.p2.x, y: hit.item.p2.y };
-                else if (hit.pointKey === 'center') {
-                    if (hit.item.type === 'arc' || hit.item.type === 'circle') originalStartPos = { x: hit.item.cx, y: hit.item.cy };
-                    else originalStartPos = { x: hit.item.center.x, y: hit.item.center.y };
-                } else if (hit.pointKey === 'rotate' || hit.pointKey === 'resize' || hit.pointKey === 'image_resize') {
-                    originalStartPos = { radius: hit.item.radius, rotation: hit.item.rotation, width: hit.item.width, height: hit.item.height };
-                }
-
-                // Döndürme Pivot Kontrolleri
-                const itemType = hit.item.type;
-                if ((itemType === 'line' || itemType === 'segment' || itemType === 'ray' || itemType === 'straightLine') && (hit.pointKey === 'p1' || hit.pointKey === 'p2')) {
-                    rotationPivot = (hit.pointKey === 'p1') ? hit.item.p2 : hit.item.p1;
-                    const movingPoint = (hit.pointKey === 'p1') ? hit.item.p1 : hit.item.p2;
-                    selectedItem.startRadius = distance(movingPoint, rotationPivot);
-                } else {
-                    rotationPivot = null;
-                }
-                
-                redrawAllStrokes();
-                return; // Resim tutuldu, yeni dikdörtgen çizmesini KES!
-            }
-        } 
-        
-        // --- 3. BOŞLUĞA TIKLANDI ---
-        if (currentTool === 'move') {
-            isMoving = false;
-            selectedItem = null;
-            redrawAllStrokes();
-            return;
-        } else if (currentTool === 'snapshot') {
-            if (selectedItem) {
-                // Seçimi temizle ve butonları gizle
-                selectedItem = null;
-                redrawAllStrokes();
-                // BURADA BİLEREK RETURN KULLANMIYORUZ!
-                // Böylece kod aşağı inmeye devam eder ve doğrudan yeni bir 'snapshotStart' dikdörtgeni çizmene olanak tanır.
-            }
-        }
-    }
-
+    
     // 4. ÇİZİM ARAÇLARI
     if (currentTool === 'none') return;
     const snapPos = snapTarget || pos;
 
-    // Canlandırma Başlangıcı
-    if (currentTool === 'snapshot') {
-        const pos = getEventPosition(e);
-        
-        if (selectedItem && selectedItem.type === 'image') {
-            const dx = pos.x - selectedItem.x;
-            const dy = pos.y - selectedItem.y;
-            
-            // 1. Mavi Döndürme Butonu Kontrolü
-            const angleRad = (selectedItem.rotation || 0) * Math.PI / 180;
-            const handleY = -selectedItem.height / 2 - 30;
-            const rotX = selectedItem.x - handleY * Math.sin(-angleRad);
-            const rotY = selectedItem.y + handleY * Math.cos(-angleRad);
-            
-            if (Math.hypot(pos.x - rotX, pos.y - rotY) < 20) {
-                window.isRotatingImageOnly = true;
-                if (e.preventDefault) e.preventDefault();
-                return;
-            }
-
-            // 2. Resmin Kendisini Tutma (Arka arkaya sürüklemek için toleranslı)
-            if (Math.abs(dx) <= (selectedItem.width / 2) + 15 && Math.abs(dy) <= (selectedItem.height / 2) + 15) {
-                isMoving = true;
-                dragStartPos = pos;
-                originalStartPos = { x: selectedItem.x, y: selectedItem.y };
-                return;
-            }
-        }
-        
-        // 3. Resmin Dışına Tıklandıysa: Seçimi bırak, yeni dikdörtgen başlat
-        selectedItem = null;
-        redrawAllStrokes();
-        snapshotStart = snapPos || pos; 
-        return;
-    }
-
+    
 // ▼▼▼ ÇOKGEN / ÇEMBER BAŞLANGICI (PC İÇİN EKLENDİ) ▼▼▼
     if (currentTool.startsWith('draw_polygon_') || currentTool === 'draw_circle') {
         let type = 0;
